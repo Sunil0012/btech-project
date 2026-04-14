@@ -1,0 +1,184 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    --primary: 217 91% 52%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 220 25% 10%;
+
+    --muted: 210 30% 95%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 28 90% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 20% 90%;
+    --input: 214 20% 90%;
+    --ring: 217 91% 52%;
+
+    --radius: 0.75rem;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 217 91% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 220 25% 10%;
+    --sidebar-border: 214 20% 90%;
+    --sidebar-ring: 217 91% 52%;
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 212 100% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 68%;
+    --accent: 28 90% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 52%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 212 100% 60%;
+    --sidebar-background: 0 0% 6%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 212 100% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 212 100% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background: hsl(var(--background));
+  }
+
+  .dark body {
+    background:
+      radial-gradient(circle at top, hsl(212 100% 10% / 0.22), transparent 32%),
+      linear-gradient(180deg, hsl(var(--background)), hsl(0 0% 2%));
+  }
+
+  .dark .teacher-portal .bg-white\/95,
+  .dark .teacher-portal .bg-white\/92,
+  .dark .teacher-portal .bg-white\/80,
+  .dark .teacher-portal .bg-white {
+    background-color: hsl(var(--card) / 0.95) !important;
+  }
+
+  .dark .teacher-portal .bg-slate-50,
+  .dark .teacher-portal .bg-slate-100 {
+    background-color: hsl(var(--muted) / 0.65) !important;
+  }
+
+  .dark .teacher-portal .bg-slate-950 {
+    background-color: hsl(var(--foreground) / 0.94) !important;
+  }
+
+  .dark .teacher-portal .border-slate-200,
+  .dark .teacher-portal .border-slate-200\/70,
+  .dark .teacher-portal .border-slate-200\/80 {
+    border-color: hsl(var(--border) / 0.9) !important;
+  }
+
+  .dark .teacher-portal .text-slate-950 {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .dark .teacher-portal .text-slate-600,
+  .dark .teacher-portal .text-slate-500,
+  .dark .teacher-portal .text-slate-400,
+  .dark .teacher-portal .text-slate-300 {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .dark .teacher-portal .text-white {
+    color: hsl(var(--background)) !important;
+  }
+
+  .dark .teacher-portal .bg-white\/5,
+  .dark .teacher-portal .bg-white\/10,
+  .dark .teacher-portal .bg-white\/12 {
+    background-color: hsl(var(--background) / 0.1) !important;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+    overflow-wrap: break-word;
+  }
+  p {
+    text-wrap: pretty;
+    overflow-wrap: break-word;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent;
+  }
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border border-border/50 shadow-lg;
+  }
+  .section-padding {
+    @apply py-16 md:py-24;
+  }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
