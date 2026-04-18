@@ -20,7 +20,7 @@ import {
   BarChart3, TrendingUp, Target, ArrowRight,
   AlertTriangle, Trophy, Brain, Play,
   Zap, Flame, Clock, Award, Sparkles,
-  BookOpen, RotateCcw, FileText, Link2, Copy,
+  BookOpen, RotateCcw, FileText, Link2,
 } from "lucide-react";
 import {
   RadialBarChart, RadialBar, ResponsiveContainer,
@@ -258,24 +258,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleCopyStudentId = async () => {
-    if (!user?.id) return;
-
-    try {
-      await navigator.clipboard.writeText(user.id);
-      toast({
-        title: "Student ID copied",
-        description: "Use this ID in the student analytics notebook or teacher-side tracking tools.",
-      });
-    } catch (error) {
-      toast({
-        title: "Could not copy Student ID",
-        description: error instanceof Error ? error.message : "Please copy it manually.",
-        variant: "destructive",
-      });
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
@@ -287,143 +269,76 @@ export default function DashboardPage() {
               {user ? `Welcome back, ${user.user_metadata?.full_name || user.email?.split("@")[0]}` : "Dashboard"}
             </h1>
             <p className="text-muted-foreground">Your GateWay preparation overview.</p>
-            {user?.id && (
-              <div className="mt-4 inline-flex max-w-full items-center gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Student ID</p>
-                  <p className="max-w-[280px] truncate font-mono text-sm">{user.id}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Use this exact ID in `GATE_DA_Student_Progress_Analytics.ipynb`.</p>
-                </div>
-                <Button variant="outline" size="sm" className="gap-2 shrink-0" onClick={() => void handleCopyStudentId()}>
-                  <Copy className="h-4 w-4" />
-                  Copy
-                </Button>
-              </div>
-            )}
           </div>
         </ScrollReveal>
 
         <ScrollReveal delay={20}>
-          <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr] mb-8">
-            {!hasRequiredCourse && (
-              <div className="xl:col-span-2 rounded-2xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <h3 className="font-semibold text-lg flex items-center gap-2">
-                      <Link2 className="h-5 w-5 text-primary" /> Join your first course
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      Paste a course code or invite link from your teacher. Your dashboard stays available now, and practice, tests, coach, and assignments unlock after you join at least one course.
-                    </p>
-                  </div>
-                  <JoinCourseModal triggerLabel="Join with code or link" />
+          {!hasRequiredCourse && (
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-6 shadow-sm mb-8">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h3 className="font-semibold text-lg flex items-center gap-2">
+                    <Link2 className="h-5 w-5 text-primary" /> Join your first course
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    Paste a course code or invite link from your teacher. Your dashboard stays available now, and practice, tests, coach, and assignments unlock after you join at least one course.
+                  </p>
                 </div>
+                <JoinCourseModal triggerLabel="Join with code or link" />
+              </div>
+            </div>
+          )}
+
+          {/* Courses Grid */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Play className="h-5 w-5 text-accent" /> Your Courses
+              </h2>
+              <JoinCourseModal triggerLabel="Join course" />
+            </div>
+
+            {enrolledCourses.length === 0 ? (
+              <div className="rounded-xl border border-dashed bg-muted/30 p-12 text-center">
+                <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                <p className="text-muted-foreground mb-4">No courses joined yet.</p>
+                <p className="text-sm text-muted-foreground">Use a course code or invite link from your teacher to join your first classroom.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {enrolledCourses.map((enrollment) => {
+                  const courseCode = enrollment.course?.join_code || "—";
+                  const courseName = enrollment.course?.title || "Untitled Course";
+                  const courseColor = `hsl(${Math.abs(courseName.charCodeAt(0)) % 360}, 70%, 60%)`;
+
+                  return (
+                    <Link
+                      key={enrollment.id}
+                      to={`/student/courses/${enrollment.course_id}`}
+                      className="group"
+                    >
+                      <div
+                        className="relative h-40 rounded-2xl overflow-hidden border-2 border-muted hover:shadow-lg transition-all cursor-pointer group-hover:border-primary/50"
+                        style={{
+                          background: `linear-gradient(135deg, hsl(${(enrollment.course_id.charCodeAt(0) * 137) % 360}, 65%, 55%) 0%, hsl(${(enrollment.course_id.charCodeAt(1) * 137) % 360}, 60%, 50%) 100%)`,
+                        }}
+                      >
+                        <div className="p-6 h-full flex flex-col justify-between text-white relative z-10">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-widest opacity-90 mb-2">Course Code</p>
+                            <p className="text-2xl font-bold font-mono break-words">{courseCode}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium line-clamp-2">{courseName}</p>
+                          </div>
+                        </div>
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-10 bg-white transition-opacity pointer-events-none" />
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             )}
-
-            <div className="bg-card border rounded-xl p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-4 mb-4">
-                <div>
-                  <h3 className="font-semibold text-sm flex items-center gap-2">
-                    <BookOpen className="h-4 w-4 text-primary" /> Assigned Homework
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Stay on top of teacher work, due dates, and submission status.
-                  </p>
-                  {liveUpdatesEnabled && (
-                    <p className="mt-2 text-[11px] text-muted-foreground">
-                      {assignmentsSyncing
-                        ? "Syncing assignment updates..."
-                        : assignmentsUpdatedAt
-                          ? `Live sync active. Updated ${new Date(assignmentsUpdatedAt).toLocaleTimeString()}.`
-                          : "Live sync active."}
-                    </p>
-                  )}
-                </div>
-                {nextAssignment && (
-                  <Link to={`/assignments/${nextAssignment.id}`}>
-                    <Button variant="hero" size="sm">Open next task</Button>
-                  </Link>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                {assignments.slice(0, 4).map((assignment) => (
-                  <div key={assignment.id} className="rounded-xl border bg-muted/30 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{assignment.title}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {assignment.course?.title || "Course"} | {getAssignmentSubjectLabel(assignment)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Due {assignment.due_date ? new Date(assignment.due_date).toLocaleString() : "whenever you are ready"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                        assignment.submission ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
-                      }`}>
-                        {assignment.submission ? "Submitted" : "Pending"}
-                      </span>
-                      <Link to={`/assignments/${assignment.id}`}>
-                        <Button variant={assignment.submission ? "outline" : "hero"} size="sm">
-                          {assignment.submission ? "Review" : "Attempt"}
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-
-                {assignments.length === 0 && (
-                  <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground text-center">
-                    No assignments yet. Your teacher can publish homework or tests here.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-card border rounded-xl p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="font-semibold text-sm flex items-center gap-2">
-                    <Play className="h-4 w-4 text-accent" /> Enrolled Courses
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Join more courses any time from this dashboard using the course code shared by your teacher.
-                  </p>
-                </div>
-                <JoinCourseModal triggerLabel="Join course" />
-              </div>
-              <div className="mt-4 space-y-3">
-                {enrolledCourses.map((enrollment) => (
-                  <div key={enrollment.id} className="rounded-xl border bg-muted/30 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">{enrollment.course?.title || "Course"}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{enrollment.course?.description || "Teacher-led classroom"}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Joined {new Date(enrollment.joined_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                        onClick={() => void handleLeaveCourse(enrollment.course_id, enrollment.course?.title || "this course")}
-                        disabled={leavingCourseId === enrollment.course_id}
-                      >
-                        {leavingCourseId === enrollment.course_id ? "Leaving..." : "Leave course"}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                {enrolledCourses.length === 0 && (
-                  <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground text-center">
-                    No courses joined yet. Use a course code or invite link from your teacher to join your first classroom.
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </ScrollReveal>
 

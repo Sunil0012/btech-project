@@ -7,6 +7,14 @@ import { TeacherWorkspaceHeader } from "@/components/teacher/TeacherWorkspaceHea
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useTeacherWorkspace } from "@/hooks/useTeacherWorkspace";
 import { createCourseForSignedInTeacher } from "@/lib/classroomData";
 import { buildTeacherCourseSummaries } from "@/lib/teacherAnalytics";
@@ -19,6 +27,7 @@ function TeacherCoursesPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const shouldHighlightCreate = searchParams.get("create") === "1";
 
   const courseSummaries = useMemo(
@@ -51,6 +60,7 @@ function TeacherCoursesPage() {
       });
       setTitle("");
       setDescription("");
+      setShowCreateDialog(false);
       setSearchParams({}, { replace: true });
       try {
         await refresh();
@@ -81,38 +91,6 @@ function TeacherCoursesPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          <TeacherWorkspaceHeader
-            eyebrow="Course Studio"
-            title={isEmptyState ? "Launch your first classroom" : "Design and operate classrooms"}
-            description={
-              isEmptyState
-                ? "Everything now lives in one Supabase project. Create a single course here and the platform will generate its join code and invite link automatically."
-                : "Each teacher course gets its own join code, roster, assignment stream, and course-level analytics. Build separate cohorts without mixing their performance data."
-            }
-            chips={[
-              `${workspace.courses.length} total courses`,
-              `${workspace.enrollments.length} enrollments`,
-              `${workspace.assignments.length} assignments published`,
-            ]}
-            aside={
-              isEmptyState ? (
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700">First publish checklist</p>
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    Add a course title, optional description, and publish once. Students will join this course from their own dashboard using the generated code or invite link.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700">Operating note</p>
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    Course join codes are separate from the teacher UID, so you can run multiple batches without exposing every class under the same code.
-                  </p>
-                </div>
-              )
-            }
-          />
-
           {isEmptyState ? (
             <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
               <div className="relative overflow-hidden rounded-[1.5rem] border border-border bg-[linear-gradient(145deg,hsl(var(--primary)/0.06)_0%,hsl(var(--background))_46%,hsl(var(--accent)/0.04)_100%)] p-8 shadow-sm">
@@ -208,74 +186,105 @@ function TeacherCoursesPage() {
               </div>
             </section>
           ) : (
-            <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-              <div className="rounded-xl border bg-card p-6 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                    <Plus className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Create Course</p>
-                    <h3 className="mt-2 text-xl font-semibold text-foreground">Launch another classroom</h3>
-                  </div>
-                </div>
-
-                <div className="mt-6 space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Course title</label>
-                    <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Weekend GATE DA Cohort" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-foreground">Description</label>
-                    <Textarea
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                      placeholder="Tell students what this batch covers and how the course is structured."
-                      className="min-h-[160px] rounded-2xl"
-                    />
-                  </div>
-
-                  <div className="rounded-xl border border-primary/10 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground">
-                    New courses automatically get a unique join code. Students enter that code in their own dashboard, and one student can join multiple courses across the same teacher workspace.
-                  </div>
-
-                  <Button variant="hero" className="w-full gap-2" onClick={() => void handleCreateCourse()} disabled={creating}>
-                    <Sparkles className="h-4 w-4" />
-                    {creating ? "Creating classroom..." : "Create course"}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="rounded-xl border border-primary/10 bg-gradient-to-r from-primary/10 via-accent/5 to-primary/10 p-5 shadow-sm">
+            <section className="space-y-6">
+              <div className="flex items-center justify-between gap-4">
+                <div className="rounded-xl border border-primary/10 bg-gradient-to-r from-primary/10 via-accent/5 to-primary/10 p-5 shadow-sm flex-1">
                   <div className="flex items-center gap-3">
                     <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15">
                       <Users className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <h3 className="text-xl font-semibold text-foreground">Classroom registry</h3>
-                      <p className="text-sm text-muted-foreground">Every course card below is an isolated teacher-managed classroom workspace.</p>
+                      <h3 className="text-xl font-semibold text-foreground">Manage Courses</h3>
+                      <p className="text-sm text-muted-foreground">Each course is an isolated classroom with its own join code, roster, and assignment stream.</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="grid gap-4 xl:grid-cols-2">
-                  {courseSummaries.map((course) => (
-                    <TeacherCourseCard
-                      key={course.id}
-                      title={course.title}
-                      description={course.description}
-                      joinCode={course.joinCode}
-                      studentCount={course.studentCount}
-                      assignmentCount={course.assignmentCount}
-                      accuracy={course.avgAccuracy}
-                      completionRate={course.completionRate}
-                      href={`/teacher/courses/${course.id}`}
-                      status={course.studentCount > 0 || course.assignmentCount > 0 ? "published" : "draft"}
-                    />
-                  ))}
-                </div>
+                <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+                  <DialogTrigger asChild>
+                    <Button variant="hero" size="lg" className="gap-2 shrink-0">
+                      <Plus className="h-5 w-5" />
+                      Create Course
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Create New Course</DialogTitle>
+                      <DialogDescription>
+                        Add a course title and optional description. A unique join code will be generated automatically.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">Course title</label>
+                        <Input 
+                          value={title} 
+                          onChange={(event) => setTitle(event.target.value)} 
+                          placeholder="Weekend GATE DA Cohort"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !creating) {
+                              void handleCreateCourse();
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">Description</label>
+                        <Textarea
+                          value={description}
+                          onChange={(event) => setDescription(event.target.value)}
+                          placeholder="Tell students what this batch covers and how the course is structured."
+                          className="min-h-[100px]"
+                        />
+                      </div>
+
+                      <div className="rounded-lg border border-primary/10 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
+                        New courses get a unique join code. Students enter it in their dashboard to join.
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setShowCreateDialog(false);
+                            setTitle("");
+                            setDescription("");
+                          }}
+                          disabled={creating}
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          variant="hero" 
+                          className="flex-1 gap-2" 
+                          onClick={() => void handleCreateCourse()} 
+                          disabled={creating}
+                        >
+                          <Sparkles className="h-4 w-4" />
+                          {creating ? "Creating..." : "Create"}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {courseSummaries.map((course) => (
+                  <TeacherCourseCard
+                    key={course.id}
+                    title={course.title}
+                    description={course.description}
+                    joinCode={course.joinCode}
+                    studentCount={course.studentCount}
+                    assignmentCount={course.assignmentCount}
+                    accuracy={course.avgAccuracy}
+                    completionRate={course.completionRate}
+                    href={`/teacher/courses/${course.id}`}
+                    status={course.studentCount > 0 || course.assignmentCount > 0 ? "published" : "draft"}
+                  />
+                ))}
               </div>
             </section>
           )}

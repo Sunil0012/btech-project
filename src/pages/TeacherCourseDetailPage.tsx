@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Download, ExternalLink, Layers3, Link2, Sparkles, Trash2, Users2, UserX } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Copy, Download, ExternalLink, Layers3, Link2, Sparkles, Trash2, Users2, UserX, FolderOpen, FileText } from "lucide-react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AssignmentBuilderModal } from "@/components/AssignmentBuilderModal";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { TeacherRosterTable } from "@/components/teacher/TeacherRosterTable";
@@ -13,15 +13,47 @@ import { parseAssignmentDescription } from "@/lib/assignmentContent";
 import { buildCourseInviteLink } from "@/lib/classroom";
 import { deleteCourseForSignedInTeacher, removeStudentFromCourseForSignedInTeacher } from "@/lib/classroomData";
 import { buildTeacherCourseSummaries, buildTeacherInsights, buildTeacherStudentSummaries, type TeacherStudentSummary } from "@/lib/teacherAnalytics";
+import { teacherSupabase } from "@/integrations/supabase/teacher-client";
+import type { TeacherTables } from "@/integrations/supabase/teacher-types";
 
 function TeacherCourseDetailPage() {
   const { courseId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { workspace, loading, refresh, syncing, lastUpdatedAt, liveUpdatesEnabled, error, workspaceReady } = useTeacherWorkspace();
   const [selectedStudent, setSelectedStudent] = useState<TeacherStudentSummary | null>(null);
   const [removingStudentId, setRemovingStudentId] = useState<string | null>(null);
   const [deletingCourse, setDeletingCourse] = useState(false);
+  const [activeTab, setActiveTab] = useState<"overview" | "assignments" | "people" | "files">((searchParams.get("tab") as any) || "overview");
+  const [courseFiles, setCourseFiles] = useState<any[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const redirectedMissingCourse = useRef(false);
+
+  useEffect(() => {
+    setSearchParams({ tab: activeTab });
+  }, [activeTab, setSearchParams]);
+
+  // Load course files
+  useEffect(() => {
+    if (!courseId) return;
+
+    const loadFiles = async () => {
+      try {
+        const { data: files, error } = await teacherSupabase
+          .from("course_files")
+          .select("*")
+          .eq("course_id", courseId)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        setCourseFiles(files || []);
+      } catch (error) {
+        console.error("Failed to load files:", error);
+      }
+    };
+
+    loadFiles();
+  }, [courseId]);
 
   const course = workspace.courses.find((item) => item.id === courseId) || null;
   const courseAssignments = workspace.assignments.filter((assignment) => assignment.course_id === courseId);
@@ -117,6 +149,71 @@ function TeacherCourseDetailPage() {
     }
   };
 
+  const handleUploadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!courseId || !event.target.files?.[0]) return;
+
+    const file = event.target.files[0];
+    setUploadingFile(true);
+
+    try {
+      // Upload to storage
+      const fileName = `${Date.now()}_${file.name}`;
+      const { data: uploadData, error: uploadError } = await teacherSupabase.storage
+        .from("course-files")
+        .upload(`${courseId}/${fileName}`, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = teacherSupabase.storage
+        .from("course-files")
+        .getPublicUrl(`${courseId}/${fileName}`);
+
+      // Save file record
+      const { error: insertError } = await teacherSupabase
+        .from("course_files")
+        .insert({
+          course_id: courseId,
+          file_name: file.name,
+          file_url: urlData.publicUrl,
+          uploaded_by: workspace.profile?.user_id || "",
+        });
+
+      if (insertError) throw insertError;
+
+      toast({
+        title: "File uploaded",
+        description: `${file.name} has been shared with your students.`,
+      });
+
+      await loadCourseFiles();
+    } catch (error) {
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Could not upload file.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingFile(false);
+      event.target.value = "";
+    }
+  };
+
+  const loadCourseFiles = async () => {
+    if (!courseId) return;
+    try {
+      const { data: files, error } = await teacherSupabase
+        .from("course_files")
+        .select("*")
+        .eq("course_id", courseId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setCourseFiles(files || []);
+    } catch (error) {
+      console.error("Failed to load files:", error);
+    }
+  };
+
   const handleDeleteCourse = async () => {
     if (!course) return;
 
@@ -195,6 +292,7 @@ function TeacherCourseDetailPage() {
           </div>
         )
       ) : (
+        <>
         <div className="space-y-6">
           <TeacherWorkspaceHeader
             eyebrow="Course Operations"
@@ -251,7 +349,35 @@ function TeacherCourseDetailPage() {
             }
           />
 
-          <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          {/* Tab Navigation */}
+          <div className="flex flex-wrap gap-2 border-b bg-card rounded-t-lg px-6">
+            {[
+              { id: "overview" as const, label: "Overview", icon: Sparkles },
+              { id: "assignments" as const, label: "Assignments", icon: Layers3 },
+              { id: "people" as const, label: "People", icon: Users2 },
+              { id: "files" as const, label: "Files", icon: FolderOpen },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
+                    activeTab === tab.id
+                      ? "border-primary text-primary font-semibold"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tab Content */}
+          {activeTab === "overview" && (
+            <>
             <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
               <div className="relative bg-[linear-gradient(135deg,hsl(var(--primary))_0%,hsl(206_100%_62%)_42%,hsl(var(--accent)/0.92)_100%)] px-6 py-6 text-white">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.35),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.16),transparent_22%)]" />
@@ -330,21 +456,20 @@ function TeacherCourseDetailPage() {
                 </div>
               </div>
             </div>
-          </section>
 
-          <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-            <div className="rounded-xl border bg-card p-6 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Sparkles className="h-5 w-5" />
+            <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="rounded-xl border bg-card p-6 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Course intelligence brief</p>
+                    <h3 className="mt-2 text-xl font-semibold text-foreground">What this classroom needs next</h3>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Course intelligence brief</p>
-                  <h3 className="mt-2 text-xl font-semibold text-foreground">What this classroom needs next</h3>
-                </div>
-              </div>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
                 <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
                   <p className="text-sm font-semibold text-foreground">Weak topics across course</p>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -486,6 +611,171 @@ function TeacherCourseDetailPage() {
               />
             </div>
           </section>
+            </>
+          )}
+
+          {/* Assignments Tab */}
+          {activeTab === "assignments" && (
+            <section className="rounded-xl border bg-card p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning/10 text-warning">
+                  <Layers3 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-foreground">Assignments in this course</h3>
+                  <p className="text-sm text-muted-foreground">Review active work and submission counts by assignment.</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {courseAssignments.map((assignment) => {
+                  const submissionCount = courseSubmissions.filter((submission) => submission.assignment_id === assignment.id).length;
+                  const assignmentContent = parseAssignmentDescription(assignment.description);
+                  return (
+                    <div key={assignment.id} className="rounded-xl border bg-muted/35 p-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="font-semibold text-foreground">{assignment.title}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">{assignmentContent.body || "No assignment description provided."}</p>
+                        </div>
+                        <span className="rounded-full border border-primary/15 bg-card px-3 py-1 text-xs font-semibold text-primary">
+                          {assignment.type === "test" ? "Assessment" : "Homework"}
+                        </span>
+                      </div>
+
+                      {assignmentContent.attachments.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {assignmentContent.attachments.map((file) => (
+                            <a
+                              key={`${assignment.id}-${file.name}`}
+                              href={file.dataUrl}
+                              download={file.name}
+                              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                            >
+                              <Download className="h-3.5 w-3.5 text-primary" />
+                              {file.name}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                        <div className="rounded-xl border bg-card p-3">
+                          <p className="text-muted-foreground">Questions</p>
+                          <p className="mt-1 font-semibold text-foreground">{assignment.question_count}</p>
+                        </div>
+                        <div className="rounded-xl border bg-card p-3">
+                          <p className="text-muted-foreground">Timer</p>
+                          <p className="mt-1 font-semibold text-foreground">{assignment.timer_minutes} min</p>
+                        </div>
+                        <div className="rounded-xl border bg-card p-3">
+                          <p className="text-muted-foreground">Submissions</p>
+                          <p className="mt-1 font-semibold text-foreground">{submissionCount}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {courseAssignments.length === 0 && (
+                  <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
+                    No assignments yet for this course.
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* People Tab */}
+          {activeTab === "people" && (
+            <section className="space-y-4">
+              <div className="rounded-xl border bg-card p-6 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Users2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-foreground">Student roster</h3>
+                    <p className="text-sm text-muted-foreground">Review accuracy, assignment completion, ELO, course activity, open visual student profiles, and remove learners when needed.</p>
+                  </div>
+                </div>
+              </div>
+              <TeacherRosterTable
+                students={courseStudents}
+                onSelectStudent={setSelectedStudent}
+                onRemoveStudent={(student) => void handleRemoveStudent(student)}
+                removingStudentId={removingStudentId}
+              />
+            </section>
+          )}
+
+          {/* Files Tab */}
+          {activeTab === "files" && (
+            <section className="rounded-xl border bg-card p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 text-accent">
+                    <FolderOpen className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-foreground">Course files</h3>
+                    <p className="text-sm text-muted-foreground">Share resources and materials with your students.</p>
+                  </div>
+                </div>
+                <label>
+                  <input
+                    type="file"
+                    onChange={(e) => void handleUploadFile(e)}
+                    disabled={uploadingFile}
+                    className="hidden"
+                  />
+                  <Button
+                    asChild
+                    variant="hero"
+                    size="sm"
+                    className="gap-2 cursor-pointer"
+                    disabled={uploadingFile}
+                  >
+                    <span>
+                      {uploadingFile ? "Uploading..." : "Upload File"}
+                    </span>
+                  </Button>
+                </label>
+              </div>
+
+              {courseFiles.length === 0 ? (
+                <div className="rounded-lg border border-dashed p-8 text-center">
+                  <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                  <p className="text-muted-foreground">No files shared yet.</p>
+                  <p className="text-sm text-muted-foreground">Upload files to share them with your students.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {courseFiles.map((file) => (
+                    <a
+                      key={file.id}
+                      href={file.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between border rounded-lg p-4 hover:bg-muted/50 transition-colors group"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="font-medium truncate group-hover:text-primary">{file.file_name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Uploaded {new Date(file.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <Download className="h-4 w-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </div>
 
           <TeacherStudentProfileDialog
             student={selectedStudent}
@@ -498,7 +788,7 @@ function TeacherCourseDetailPage() {
             open={Boolean(selectedStudent)}
             onOpenChange={(open) => !open && setSelectedStudent(null)}
           />
-        </div>
+        </>
       )}
     </TeacherLayout>
   );

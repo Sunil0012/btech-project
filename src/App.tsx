@@ -24,6 +24,7 @@ import {
   TeacherSignupPage,
 } from "./pages/AuthPages";
 import AssignmentAttemptPage from "./pages/AssignmentAttemptPage";
+import StudentCourseDetailPage from "./pages/StudentCourseDetailPage";
 import TeacherDashboardPage from "./pages/TeacherDashboardPage";
 import TeacherCoursesPage from "./pages/TeacherCoursesPage";
 import TeacherCourseDetailPage from "./pages/TeacherCourseDetailPage";
@@ -62,6 +63,7 @@ const App = () => (
               <Route path="/ai-coach" element={<ProtectedRoute allowedRoles={["student"]} requireCourse><AICoachPage /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute allowedRoles={["student"]}><SettingsPage /></ProtectedRoute>} />
               <Route path="/assignments/:assignmentId" element={<ProtectedRoute allowedRoles={["student"]} requireCourse><AssignmentAttemptPage /></ProtectedRoute>} />
+              <Route path="/student/courses/:courseId" element={<ProtectedRoute allowedRoles={["student"]}><StudentCourseDetailPage /></ProtectedRoute>} />
               <Route path="/join-course/:joinCode" element={<ProtectedRoute allowedRoles={["student"]}><StudentCourseInvitePage /></ProtectedRoute>} />
               <Route path="/teacher/dashboard" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherDashboardPage /></ProtectedRoute>} />
               <Route path="/teacher/courses" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherCoursesPage /></ProtectedRoute>} />

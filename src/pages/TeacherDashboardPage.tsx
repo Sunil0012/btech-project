@@ -200,10 +200,6 @@ function TeacherDashboardPage() {
             }
             aside={
               <div className="space-y-3">
-                <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-primary">Live classroom signal</p>
-                  <p className="mt-2 text-base font-semibold text-foreground">{liveSignalLabel}</p>
-                </div>
                 <div className="rounded-xl border border-accent/10 bg-accent/5 p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-accent">Weakest topic</p>
                   <p className="mt-2 text-base font-semibold text-foreground">{weakTopic}</p>
