@@ -681,11 +681,23 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
       completed_at: completedAt,
       user_id: user.id,
     };
+    
+    console.log("recordTestHistory: Saving test with payload:", {
+      testType: entry.test_type,
+      hasReviewPayload: Boolean(entry.review_payload),
+      reviewPayloadKeys: entry.review_payload ? Object.keys(entry.review_payload) : [],
+    });
+    
     let insertError: { code?: string; message?: string; details?: string; hint?: string } | null = null;
 
     const { error } = await studentSupabase.from("test_history").insert(historyEntry);
 
+    if (error) {
+      console.error("recordTestHistory: Insert error:", error);
+    }
+
     if (error && isMissingReviewPayloadColumnError(error)) {
+      console.warn("recordTestHistory: review_payload column missing, retrying without it");
       const { review_payload: _reviewPayload, ...legacyHistoryEntry } = historyEntry;
       const fallbackInsert = await studentSupabase.from("test_history").insert(legacyHistoryEntry);
       insertError = fallbackInsert.error;
@@ -693,7 +705,12 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
       insertError = error;
     }
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error("recordTestHistory: Final error:", insertError);
+      throw insertError;
+    }
+
+    console.log("recordTestHistory: Successfully saved test history");
 
     await syncStudentTestHistory({
       student: buildStudentIdentity(user, profile, studentEloState),

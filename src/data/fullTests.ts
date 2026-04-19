@@ -72,9 +72,10 @@ const fullTests: Record<FullTestId, { meta: FullTestMeta; questions: readonly Fu
   "da-2024-s1": {
     meta: {
       id: "da-2024-s1",
-      label: "GATE DA 2024 Session 1",
-      description: "Official-style paper import from DA 2024 Session 1 with usable answer-key mapping.",
+      label: "GATE DA 2024",
+      description: "Official-style paper import from DA 2024 with usable answer-key mapping.",
       questionCount: da24S1Questions.length,
+      displayQuestionCount: 65,
       durationMinutes: 180,
       maxMarks: getTotalMarks(da24S1Questions),
       paperCode: "Official Paper",
@@ -91,7 +92,6 @@ const fullTests: Record<FullTestId, { meta: FullTestMeta; questions: readonly Fu
       durationMinutes: 180,
       maxMarks: 100,
       paperCode: "Official Paper",
-      note: "Question 59 is omitted because the imported paper data contains 64 usable questions.",
     },
     questions: da2025Questions,
   },

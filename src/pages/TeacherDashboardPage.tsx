@@ -1,5 +1,4 @@
 import {
-  Activity,
   ArrowRight,
   BookOpen,
   Brain,
@@ -449,34 +448,7 @@ function TeacherDashboardPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border bg-card p-5 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Activity className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">Recent Activity</p>
-                    <h3 className="mt-2 text-xl font-semibold text-foreground">Student and submission feed</h3>
-                  </div>
-                </div>
 
-                <div className="mt-5 space-y-3">
-                  {activity.map((item) => (
-                    <div key={item.id} className="rounded-xl border bg-muted/30 p-4">
-                      <p className="font-semibold text-foreground">{item.label}</p>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.detail}</p>
-                      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        {item.timestamp ? new Date(item.timestamp).toLocaleString() : "No timestamp"}
-                      </p>
-                    </div>
-                  ))}
-                  {activity.length === 0 && (
-                    <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
-                      Activity will appear after students join, work through assigned coursework, and submit assignments.
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
 
             <div className="space-y-4">
@@ -510,51 +482,6 @@ function TeacherDashboardPage() {
                   {lowMomentumCourses.length === 0 && (
                     <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
                       The radar will populate once students begin submitting work and classroom trends start forming.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-xl border bg-card p-5 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <BookOpen className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">Course Pulse</p>
-                    <h3 className="mt-2 text-xl font-semibold text-foreground">Classrooms with the strongest current signal</h3>
-                  </div>
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  {strongestCourses.map((course) => (
-                    <Link
-                      key={course.id}
-                      to={`/teacher/courses/${course.id}`}
-                      className="block rounded-xl border bg-muted/30 p-4 transition-colors hover:border-primary/20 hover:bg-primary/5"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-foreground">{course.title}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">{course.studentCount} students • {course.assignmentCount} assignments</p>
-                        </div>
-                        <span className="rounded-full border border-primary/10 bg-card px-3 py-1 text-xs font-medium text-primary">
-                          {course.joinCode}
-                        </span>
-                      </div>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        <div className="rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
-                          Accuracy <span className="font-semibold text-foreground">{course.avgAccuracy}%</span>
-                        </div>
-                        <div className="rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground">
-                          Completion <span className="font-semibold text-foreground">{course.completionRate}%</span>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                  {strongestCourses.length === 0 && (
-                    <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
-                      Course health cards will appear here after students join and start working.
                     </div>
                   )}
                 </div>

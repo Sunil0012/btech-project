@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useStudentAuth } from "@/contexts/AuthContext";
 import { studentSupabase } from "@/integrations/supabase/student-client";
 import type { StudentTables } from "@/integrations/supabase/student-types";
-import { visibleSubjects, getTopicById, getSubjectById } from "@/data/subjects";
+import { visibleSubjects } from "@/data/subjects";
 import { generateAIInsights, AIInsightResult } from "@/lib/aiCoach";
 import {
   BarChart3, TrendingUp, Target, Brain, Sparkles,
@@ -119,22 +119,6 @@ export default function InsightsPage() {
           setUserProgress(progressData);
         }
 
-        // Generate AI insights
-        if (historyData && historyData.length > 0) {
-          setLoadingInsights(true);
-          try {
-            const insights = await generateAIInsights({
-              userId: user.id,
-              testHistory: historyData,
-              userProgress: progressData || [],
-            });
-            setAiInsights(insights);
-          } catch (error) {
-            console.error("Failed to generate AI insights:", error);
-          } finally {
-            setLoadingInsights(false);
-          }
-        }
       } finally {
         setLoading(false);
       }
@@ -232,7 +216,7 @@ export default function InsightsPage() {
         date: test.completed_at?.split("T")[0] || `Test ${idx}`,
         score: test.score || 0,
         maxScore: test.max_score || 100,
-        accuracy: test.total_questions > 0 ? Math.round((test.correct_answers || 0 / test.total_questions) * 100) : 0,
+        accuracy: test.total_questions > 0 ? Math.round(((test.correct_answers || 0) / test.total_questions) * 100) : 0,
       }));
   }, [testHistory]);
 
@@ -263,6 +247,72 @@ export default function InsightsPage() {
       },
     ];
   }, [topicMetrics]);
+
+  useEffect(() => {
+    if (!user || (subjectMetrics.length === 0 && testHistory.length === 0)) {
+      setAiInsights(null);
+      return;
+    }
+
+    const totalAnswered = subjectMetrics.reduce((sum, metric) => sum + metric.totalAnswers, 0);
+    const weakTopics = topicMetrics
+      .filter((topic) => topic.status === "weak")
+      .slice(0, 5)
+      .map((topic) => ({
+        name: topic.topicName,
+        accuracy: Math.round(topic.accuracy),
+        attempted: topic.totalAttempts,
+        totalQuestions: topic.totalAttempts,
+      }));
+    const strongTopics = topicMetrics
+      .filter((topic) => topic.status === "strong")
+      .slice(0, 5)
+      .map((topic) => ({
+        name: topic.topicName,
+        accuracy: Math.round(topic.accuracy),
+        attempted: topic.totalAttempts,
+        totalQuestions: topic.totalAttempts,
+      }));
+
+    const loadAiInsights = async () => {
+      setLoadingInsights(true);
+      try {
+        const insights = await generateAIInsights({
+          studentName: user.user_metadata?.full_name || user.email?.split("@")[0] || "Student",
+          elo: 1400,
+          tier:
+            testMetrics.answerAccuracy >= 0.8 ? "Advanced" :
+            testMetrics.answerAccuracy >= 0.65 ? "Intermediate" :
+            testMetrics.answerAccuracy >= 0.5 ? "Developing" :
+            "Foundation",
+          overallAccuracy: Math.round(testMetrics.answerAccuracy * 100),
+          totalAnswered,
+          streak: 0,
+          weakTopics,
+          strongTopics,
+          subjectPerformance: subjectMetrics.map((metric) => ({
+            name: metric.subjectName,
+            accuracy: Math.round(metric.accuracy),
+            attempted: metric.totalAnswers,
+            totalQuestions: Math.max(metric.totalAnswers, metric.totalAttempts),
+          })),
+          recentTests: testHistory.slice(0, 8).map((test) => ({
+            type: test.test_type,
+            correct: test.correct_answers,
+            total: test.total_questions,
+            completedAt: test.completed_at,
+          })),
+        });
+        setAiInsights(insights);
+      } catch (error) {
+        console.error("Failed to generate AI insights:", error);
+      } finally {
+        setLoadingInsights(false);
+      }
+    };
+
+    void loadAiInsights();
+  }, [subjectMetrics, testHistory, testMetrics.answerAccuracy, topicMetrics, user]);
 
   if (loading) {
     return (
@@ -541,7 +591,7 @@ export default function InsightsPage() {
                     );
                   })}
                 {topicMetrics.filter((t) => t.status === "weak" || t.status === "developing").length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-8">No focus areas right now! You're performing great! 🎉</p>
+                  <p className="text-sm text-muted-foreground text-center py-8">No focus areas right now. You are performing great.</p>
                 )}
               </div>
             </div>
@@ -580,7 +630,7 @@ export default function InsightsPage() {
                         <span className="text-xs text-green-600 dark:text-green-400">accuracy</span>
                       </div>
                       <div className="flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
-                        <span>•</span>
+                        <span>-</span>
                         <span>{topic.totalAttempts} completed</span>
                       </div>
                     </div>
@@ -603,31 +653,36 @@ export default function InsightsPage() {
                   <Sparkles className="h-5 w-5 text-purple-500 animate-pulse" />
                 </div>
               </div>
+              {aiInsights.summary && (
+                <div className="rounded-xl border border-purple-200/50 bg-white/70 p-4 text-sm text-slate-700 dark:border-purple-800/30 dark:bg-slate-950/40 dark:text-slate-200">
+                  {aiInsights.summary}
+                </div>
+              )}
               <div className="grid md:grid-cols-3 gap-6">
                 {aiInsights.strengths && aiInsights.strengths.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-green-900 dark:text-green-100 flex items-center gap-2">
-                      💪 Your Strengths
+                      Your Strengths
                     </h3>
                     <ul className="space-y-2">
                       {aiInsights.strengths.map((s, i) => (
                         <li key={i} className="text-sm text-purple-800 dark:text-purple-200 flex gap-2">
-                          <span className="text-green-600 dark:text-green-400">•</span>
+                          <span className="text-green-600 dark:text-green-400">-</span>
                           <span>{s}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
                 )}
-                {aiInsights.areasToImprove && aiInsights.areasToImprove.length > 0 && (
+                {aiInsights.risks && aiInsights.risks.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-orange-900 dark:text-orange-100 flex items-center gap-2">
-                      🎯 Areas to Improve
+                      Areas to Improve
                     </h3>
                     <ul className="space-y-2">
-                      {aiInsights.areasToImprove.map((a, i) => (
+                      {aiInsights.risks.map((a, i) => (
                         <li key={i} className="text-sm text-purple-800 dark:text-purple-200 flex gap-2">
-                          <span className="text-orange-600 dark:text-orange-400">•</span>
+                          <span className="text-orange-600 dark:text-orange-400">-</span>
                           <span>{a}</span>
                         </li>
                       ))}
@@ -637,12 +692,12 @@ export default function InsightsPage() {
                 {aiInsights.recommendations && aiInsights.recommendations.length > 0 && (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
-                      📚 Recommendations
+                      Recommendations
                     </h3>
                     <ul className="space-y-2">
                       {aiInsights.recommendations.map((r, i) => (
                         <li key={i} className="text-sm text-purple-800 dark:text-purple-200 flex gap-2">
-                          <span className="text-blue-600 dark:text-blue-400">•</span>
+                          <span className="text-blue-600 dark:text-blue-400">-</span>
                           <span>{r}</span>
                         </li>
                       ))}

@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useStudentAuth } from "@/contexts/AuthContext";
-import { Question, getQuestionsBySubject, getQuestionsByTopic } from "@/data/questions";
+import { Question, getQuestionsBySubject, getQuestionsByTopic, questions as allQuestions } from "@/data/questions";
 import { getTopicById, getSubjectById } from "@/data/subjects";
 import { Navbar } from "@/components/Navbar";
 import { buildTestReviewPayload, calculateWarningBreakdown, type AttemptKind, type PracticeAnswer } from "@/lib/testReview";
@@ -37,9 +37,11 @@ import {
 interface ExamShellComponentProps {
   // Test configuration
   testType: "topic-wise" | "adaptive";
+  adaptiveType?: "mix" | "subject-wise"; // For adaptive tests
   subjectId: string;
   topicId?: string;
-  durationMinutes: number;
+  durationMinutes?: number; // Optional if timePerQuestion is used
+  timePerQuestion?: number; // Minutes per question (default 3). If set, durationMinutes is calculated
   questionCount: number;
   
   // Callbacks
@@ -49,9 +51,11 @@ interface ExamShellComponentProps {
 
 export function ExamShellComponent({
   testType,
+  adaptiveType,
   subjectId,
   topicId,
-  durationMinutes,
+  durationMinutes: fixedDuration,
+  timePerQuestion = 3, // Default 3 minutes per question
   questionCount,
   onComplete,
   onExit,
@@ -66,6 +70,9 @@ export function ExamShellComponent({
     studentElo,
   } = useStudentAuth();
 
+  // Calculate duration based on timePerQuestion or use fixed duration
+  const calculatedDurationMinutes = fixedDuration ?? questionCount * timePerQuestion;
+
   // Load questions
   const [questions, setQuestions] = useState<Question[]>([]);
   const sessionIdRef = useRef(Math.random().toString(36).slice(2, 10));
@@ -73,21 +80,36 @@ export function ExamShellComponent({
   useEffect(() => {
     let availableQuestions: Question[] = [];
 
-    if (topicId) {
+    // For adaptive mix test, pull from all subjects
+    if (testType === "adaptive" && adaptiveType === "mix") {
+      availableQuestions = allQuestions;
+    } else if (topicId) {
       availableQuestions = getQuestionsByTopic(topicId);
     } else {
       availableQuestions = getQuestionsBySubject(subjectId);
     }
 
-    // Limit to questionCount
-    const selected = availableQuestions.slice(0, questionCount);
-    setQuestions(selected);
-  }, [subjectId, topicId, questionCount]);
+    // Shuffle questions for mix type to ensure variety
+    if (testType === "adaptive" && adaptiveType === "mix") {
+      // Fisher-Yates shuffle
+      const shuffled = [...availableQuestions];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const selected = shuffled.slice(0, questionCount);
+      setQuestions(selected);
+    } else {
+      // Limit to questionCount
+      const selected = availableQuestions.slice(0, questionCount);
+      setQuestions(selected);
+    }
+  }, [subjectId, topicId, questionCount, testType, adaptiveType]);
 
   // Initialize exam shell state
   const [examState, setExamState] = useState<ExamShellState | null>(null);
   const [showExitConfirmation, setShowExitConfirmation] = useState(false);
-  const [timerMinutes, setTimerMinutes] = useState(durationMinutes);
+  const [timerMinutes, setTimerMinutes] = useState(calculatedDurationMinutes);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [showReviewMode, setShowReviewMode] = useState(false);
   const [showExplanations, setShowExplanations] = useState(false);
@@ -101,11 +123,11 @@ export function ExamShellComponent({
       testType,
       totalQuestions: questions.length,
       targetQuestions: Math.min(questionCount, questions.length),
-      durationSeconds: durationMinutes * 60,
+      durationSeconds: calculatedDurationMinutes * 60,
     });
 
     setExamState(state);
-  }, [questions, durationMinutes, questionCount, testType, examState]);
+  }, [questions, calculatedDurationMinutes, questionCount, testType, examState]);
 
   // Timer effect
   useEffect(() => {
@@ -205,6 +227,11 @@ export function ExamShellComponent({
     setSubmitError(null);
 
     try {
+      const attemptDurationSeconds = Math.min(
+        calculatedDurationMinutes * 60,
+        Math.max(0, Math.round((Date.now() - examState.timerStartedAt) / 1000))
+      );
+
       // Calculate results
       let correctCount = 0;
       let totalMarks = 0;
@@ -236,20 +263,24 @@ export function ExamShellComponent({
       });
 
       // Build warning breakdown
-      const warningBreakdown = calculateWarningBreakdown(0, undefined);
+      const warningBreakdown = calculateWarningBreakdown(0, testType);
 
-      // Build review payload with new extended fields
+      // Get answers in the correct format
+      const answersArray = getAnswersArray(examState, questions.length);
+
+      // Build review payload with question IDs and answers
       const reviewPayload = buildTestReviewPayload({
         questions,
-        answers: getAnswersArray(examState, questions.length),
+        answers: answersArray,
         attemptKind: (testType === "topic-wise" ? "topic-wise" : "adaptive") as AttemptKind,
         countsForStats: true,
         countsForRating: true,
         warningBreakdown,
         reviewMetadata: {
-          attemptDuration: durationMinutes * 60 - examState.durationSeconds,
+          attemptDuration: attemptDurationSeconds,
           startTime: new Date(examState.timerStartedAt).toISOString(),
           endTime: new Date().toISOString(),
+          testType,
         },
       });
 
@@ -265,7 +296,7 @@ export function ExamShellComponent({
           correct_answers: correctCount,
           total_questions: questions.length,
           violations: 0,
-          duration_seconds: durationMinutes * 60 - examState.durationSeconds,
+          duration_seconds: attemptDurationSeconds,
           review_payload: reviewPayload,
         });
 
@@ -283,7 +314,7 @@ export function ExamShellComponent({
             correct_answers: correctCount,
             score: totalMarks,
             max_score: maxMarks,
-            duration_seconds: durationMinutes * 60 - examState.durationSeconds,
+            duration_seconds: attemptDurationSeconds,
           },
         });
       }
@@ -302,7 +333,7 @@ export function ExamShellComponent({
       setSubmitError(error instanceof Error ? error.message : "Failed to submit test. Please try again.");
       submittingRef.current = false;
     }
-  }, [examState, user, questions, durationMinutes, testType, subjectId, topicId, recordTestHistory, addAnsweredQuestion, updateSubjectScore, navigate, onComplete, processAction]);
+  }, [examState, user, questions, calculatedDurationMinutes, testType, subjectId, topicId, recordTestHistory, addAnsweredQuestion, updateSubjectScore, navigate, onComplete, processAction]);
 
   const handleExit = useCallback(() => {
     setShowExitConfirmation(true);
@@ -327,7 +358,7 @@ export function ExamShellComponent({
     );
   }
 
-  if (examState.submitted) {
+  if (examState.submitted && !showReviewMode) {
     // Calculate results
     let correctCount = 0;
     let totalMarks = 0;
@@ -397,6 +428,16 @@ export function ExamShellComponent({
   }
 
   if (showReviewMode) {
+    const currentIdx = examState?.currentQuestionIndex || 0;
+    const currentQuestion = questions[currentIdx];
+    const currentAnswer = currentQuestion ? examState?.answers.get(currentIdx) : null;
+    const isCorrect = currentQuestion && (
+      (currentQuestion.type === "mcq" && currentAnswer === currentQuestion.correctAnswer) ||
+      (currentQuestion.type === "msq" && currentQuestion.correctAnswers && Array.isArray(currentAnswer) && currentQuestion.correctAnswers.length === currentAnswer.length && currentQuestion.correctAnswers.every((v) => currentAnswer.includes(v))) ||
+      (currentQuestion.type === "nat" && currentQuestion.correctNat && typeof currentAnswer === "string" && !isNaN(parseFloat(currentAnswer)) && parseFloat(currentAnswer) >= currentQuestion.correctNat.min && parseFloat(currentAnswer) <= currentQuestion.correctNat.max)
+    );
+    const isAnswered = currentAnswer !== null && currentAnswer !== undefined && (typeof currentAnswer !== "string" || currentAnswer.trim() !== "") && (typeof currentAnswer !== "object" || (Array.isArray(currentAnswer) && currentAnswer.length > 0));
+
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
@@ -404,25 +445,88 @@ export function ExamShellComponent({
           <div className="space-y-6">
             <div className="space-y-2">
               <h1 className="text-3xl font-bold">Test Review</h1>
-              <p className="text-muted-foreground">Review your answers below.</p>
+              <p className="text-muted-foreground">Q{currentIdx + 1} of {questions.length} - Review your answers.</p>
             </div>
 
-            <div className="grid md:grid-cols-4 gap-4">
-              {questions.map((q, i) => (
-                <button
-                  key={q.id}
-                  onClick={() => {
-                    setExamState((prev) => prev ? {...prev, currentQuestionIndex: i} : prev);
-                  }}
-                  className="p-3 rounded-lg border hover:bg-muted transition-colors text-sm"
-                >
-                  <div className="font-medium">Q{i + 1}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {examState.answers.get(i) ? "Answered" : "Unanswered"}
+            {currentQuestion && (
+              <div className="space-y-6">
+                <div className="rounded-xl border bg-card p-6">
+                  <h3 className="text-lg font-semibold mb-4">{currentQuestion.question}</h3>
+                  <div className="space-y-3">
+                    {currentQuestion.type === "nat" ? (
+                      <div>
+                        <p className="text-sm font-medium mb-2">Your Answer:</p>
+                        <p className="text-sm bg-muted rounded-lg p-3">{currentAnswer || "(No answer)"}</p>
+                        {currentQuestion.correctNat && (
+                          <p className="text-sm text-success mt-2">Correct Range: {currentQuestion.correctNat.min} - {currentQuestion.correctNat.max}</p>
+                        )}
+                      </div>
+                    ) : (
+                      currentQuestion.options.map((option, idx) => {
+                        const isSelectedByUser = currentQuestion.type === "mcq" ? currentAnswer === idx : Array.isArray(currentAnswer) && currentAnswer.includes(idx);
+                        const isCorrectAnswer = currentQuestion.type === "mcq" ? idx === currentQuestion.correctAnswer : currentQuestion.correctAnswers?.includes(idx);
+                        return (
+                          <div key={idx} className={`p-4 rounded-lg border transition-colors ${
+                            isSelectedByUser && isCorrectAnswer ? "bg-success/10 border-success" :
+                            isSelectedByUser && !isCorrectAnswer ? "bg-destructive/10 border-destructive" :
+                            isCorrectAnswer && !isSelectedByUser ? "bg-success/5 border-success/50" :
+                            "bg-muted/30"
+                          }`}>
+                            <div className="flex items-start gap-3">
+                              <div className={`w-6 h-6 rounded border flex items-center justify-center text-sm font-medium ${
+                                isSelectedByUser && isCorrectAnswer ? "bg-success text-white border-success" :
+                                isSelectedByUser && !isCorrectAnswer ? "bg-destructive text-white border-destructive" :
+                                isCorrectAnswer ? "bg-success/20 border-success" :
+                                "bg-muted border-muted-foreground/30"
+                              }`}>
+                                {String.fromCharCode(65 + idx)}
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm">{option}</p>
+                                {isSelectedByUser && isCorrectAnswer && <p className="text-xs text-success mt-1">Your correct answer</p>}
+                                {isSelectedByUser && !isCorrectAnswer && <p className="text-xs text-destructive mt-1">Your incorrect answer</p>}
+                                {isCorrectAnswer && !isSelectedByUser && <p className="text-xs text-success mt-1">Correct answer</p>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
-                </button>
-              ))}
-            </div>
+                </div>
+
+                {currentQuestion.explanation && (
+                  <div className="rounded-xl border bg-primary/5 border-primary/20 p-6">
+                    <p className="text-sm font-semibold text-primary mb-2">Explanation</p>
+                    <p className="text-sm text-muted-foreground">{currentQuestion.explanation}</p>
+                  </div>
+                )}
+
+                <div className="grid md:grid-cols-8 gap-2 max-h-32 overflow-y-auto p-4 bg-muted/30 rounded-lg">
+                  {questions.map((q, i) => {
+                    const ans = examState?.answers.get(i);
+                    const correct = (q.type === "mcq" && ans === q.correctAnswer) ||
+                      (q.type === "msq" && q.correctAnswers && Array.isArray(ans) && q.correctAnswers.length === ans.length && q.correctAnswers.every((v) => ans.includes(v))) ||
+                      (q.type === "nat" && q.correctNat && typeof ans === "string" && !isNaN(parseFloat(ans)) && parseFloat(ans) >= q.correctNat.min && parseFloat(ans) <= q.correctNat.max);
+                    const answered = ans !== null && ans !== undefined && (typeof ans !== "string" || ans.trim() !== "") && (typeof ans !== "object" || (Array.isArray(ans) && ans.length > 0));
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={() => setExamState((prev) => prev ? {...prev, currentQuestionIndex: i} : prev)}
+                        className={`p-2 rounded text-xs font-medium transition-colors ${
+                          i === currentIdx ? "bg-primary text-primary-foreground" :
+                          correct ? "bg-success text-white" :
+                          answered ? "bg-warning text-white" :
+                          "bg-muted hover:bg-muted-foreground/20"
+                        }`}
+                      >
+                        Q{i + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => setShowReviewMode(false)}>
@@ -456,9 +560,17 @@ export function ExamShellComponent({
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm font-mono">
-              <Clock className="h-4 w-4 text-destructive" />
-              <span>{String(timerMinutes).padStart(2, "0")}:{String(timerSeconds).padStart(2, "0")}</span>
+            <div className={`flex items-center gap-2 text-sm font-mono font-bold px-3 py-2 rounded-lg transition-all ${
+              timerMinutes === 0 && timerSeconds < 60 
+                ? "bg-destructive text-destructive-foreground animate-pulse"
+                : timerMinutes < 5 
+                ? "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300"
+                : "text-muted-foreground"
+            }`}>
+              <Clock className={`h-5 w-5 ${timerMinutes === 0 && timerSeconds < 60 ? "animate-pulse" : ""}`} />
+              <span className={`text-lg ${timerMinutes === 0 && timerSeconds < 60 ? "font-bold" : ""}`}>
+                {String(timerMinutes).padStart(2, "0")}:{String(timerSeconds).padStart(2, "0")}
+              </span>
             </div>
             <Button size="sm" onClick={handleSubmit} disabled={examState.submitted}>
               Submit

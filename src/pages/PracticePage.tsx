@@ -3,6 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Button } from "@/components/ui/button";
+import { ExamShellComponent } from "@/components/ExamShellComponent";
 import { useStudentAuth } from "@/contexts/AuthContext";
 import { visibleSubjects } from "@/data/subjects";
 import {
@@ -233,6 +234,7 @@ export default function PracticePage() {
   const [customTimer, setCustomTimer] = useState(30);
   const [topicQuestionCount, setTopicQuestionCount] = useState(10);
   const [adaptiveQuestionCount, setAdaptiveQuestionCount] = useState(10);
+  const [adaptiveType, setAdaptiveType] = useState<"mix" | "subject-wise">("subject-wise");
   const [selectedFullTest, setSelectedFullTest] = useState<FullTestId>(hasRequestedFullTest ? urlTest! : "da-2025");
 
   useEffect(() => {
@@ -245,15 +247,25 @@ export default function PracticePage() {
   if (mode === "full-mock") return <GateStyleMockTest testId={selectedFullTest} />;
   if (mode === "topic-wise" && (selectedTopic || selectedSubject))
     return (
-      <TopicTest
-        topicId={selectedTopic}
+      <ExamShellComponent
+        testType="topic-wise"
         subjectId={selectedSubject}
-        timerMinutes={customTimer}
+        topicId={selectedTopic}
+        durationMinutes={customTimer}
         questionCount={topicQuestionCount}
+        onExit={() => setMode("select")}
       />
     );
-  if (mode === "adaptive" && selectedSubject)
-    return <AdaptiveTest subjectId={selectedSubject} questionCount={adaptiveQuestionCount} />;
+  if (mode === "adaptive" && (adaptiveType === "mix" || selectedSubject))
+    return (
+      <ExamShellComponent
+        testType="adaptive"
+        adaptiveType={adaptiveType}
+        subjectId={selectedSubject}
+        questionCount={adaptiveQuestionCount}
+        onExit={() => setMode("select")}
+      />
+    );
 
   return (
     <div className="min-h-screen bg-background">
@@ -364,26 +376,54 @@ export default function PracticePage() {
               <h3 className="font-semibold text-lg">Adaptive Practice (Advanced)</h3>
               <p className="text-sm text-muted-foreground">Each next question is recommended live using your ELO, streak, weak topics, and recent answers.</p>
 
-              <select className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}>
-                <option value="">Select subject...</option>
-                {visibleSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Adaptive Type</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAdaptiveType("subject-wise")}
+                    className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                      adaptiveType === "subject-wise"
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-muted hover:border-primary"
+                    }`}
+                  >
+                    Subject-wise
+                  </button>
+                  <button
+                    onClick={() => setAdaptiveType("mix")}
+                    className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                      adaptiveType === "mix"
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-muted hover:border-primary"
+                    }`}
+                  >
+                    Mix (All)
+                  </button>
+                </div>
+              </div>
+
+              {adaptiveType === "subject-wise" && (
+                <select className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}>
+                  <option value="">Select subject...</option>
+                  {visibleSubjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              )}
 
               <div>
-                <label className="text-xs text-muted-foreground">Questions</label>
+                <label className="text-xs text-muted-foreground">Questions (3 min each)</label>
                 <select
                   className="w-full rounded-lg border bg-background px-3 py-2 text-sm mt-1"
                   value={adaptiveQuestionCount}
                   onChange={(e) => setAdaptiveQuestionCount(parseInt(e.target.value))}
                 >
                   {[10, 20, 30].map((count) => (
-                    <option key={count} value={count}>{count}</option>
+                    <option key={count} value={count}>{count} questions (~{count * 3} min)</option>
                   ))}
                 </select>
               </div>
 
-              <Button variant="hero" className="w-full gap-2 mt-auto" disabled={!selectedSubject}
+              <Button variant="hero" className="w-full gap-2 mt-auto" disabled={adaptiveType === "subject-wise" && !selectedSubject}
                 onClick={() => setMode("adaptive")}>
                 <Play className="h-4 w-4" /> Start Adaptive Practice
               </Button>
@@ -613,6 +653,16 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
 
     if (finalRiskFinish) totalMarks = Math.max(0, totalMarks - 5);
 
+    const testReviewPayload = buildTestReviewPayload({
+      questions,
+      answers,
+      fullTestId: testId,
+      attemptKind: "full-mock",
+      countsForStats: true,
+      countsForRating: true,
+      warningBreakdown: { violations: finalViolations, testType: "full-mock" },
+    });
+
     void recordTestHistory({
       test_type: "full-mock",
       subject_id: null,
@@ -624,11 +674,7 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
       total_questions: questions.length,
       violations: finalViolations,
       duration_seconds: fullTestMeta.durationMinutes * 60 - timeLeft,
-      review_payload: buildTestReviewPayload({
-        questions,
-        answers,
-        fullTestId: testId,
-      }),
+      review_payload: testReviewPayload,
     });
 
     if (finalRiskFinish) {
@@ -1424,825 +1470,7 @@ function OfficialGateExamShell({
 }
 
 // ============================================================
-// Topic Test with custom timer
-// ============================================================
-function TopicTest({
-  topicId,
-  subjectId,
-  timerMinutes,
-  questionCount,
-}: {
-  topicId: string;
-  subjectId: string;
-  timerMinutes: number;
-  questionCount: number;
-}) {
-  const {
-    user,
-    answeredQuestions,
-    addAnsweredQuestion,
-    studentElo,
-    setStudentElo,
-    updateSubjectScore,
-    recordTestHistory,
-  } = useStudentAuth();
-  const [practiceElo, setPracticeElo] = useState(studentElo);
-  const initialRecommendationRef = useRef<NextBestQuestionRecommendation>(
-    recommendNextBestAdaptiveQuestion({
-      subjectId,
-      topicId: topicId || null,
-      constrainToTopic: Boolean(topicId),
-      studentElo,
-      answeredQuestionIds: answeredQuestions,
-    })
-  );
-  const [questions, setQuestions] = useState<Question[]>(() =>
-    initialRecommendationRef.current.question ? [initialRecommendationRef.current.question] : []
-  );
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<PracticeAnswer>(() => createEmptyAnswer(questions[0]));
-  const [submittedAnswers, setSubmittedAnswers] = useState<PracticeAnswer[]>(() =>
-    questions.length > 0 ? [createEmptyAnswer(questions[0])] : []
-  );
-  const [sessionAttempts, setSessionAttempts] = useState<AdaptiveSessionAttempt[]>([]);
-  const [questionReviews, setQuestionReviews] = useState<Array<QuestionSessionReview | null>>(
-    () => (questions.length > 0 ? [null] : [])
-  );
-  const [recommendations, setRecommendations] = useState<NextBestQuestionRecommendation[]>(() =>
-    questions.length > 0 ? [initialRecommendationRef.current] : []
-  );
-  const [showExplanation, setShowExplanation] = useState(false);
-  const [results, setResults] = useState<PracticeResult[]>([]);
-  const [timeLeft, setTimeLeft] = useState(timerMinutes * 60);
-  const [finished, setFinished] = useState(false);
-  const [reviewMode, setReviewMode] = useState(false);
-  const historySavedRef = useRef(false);
-  const sessionIdRef = useRef(createGraphSessionId());
-  const servedQuestionIdsRef = useRef(new Set<string>());
-  const questionShownAtRef = useRef(Date.now());
-  const [questionElapsedSeconds, setQuestionElapsedSeconds] = useState(0);
-  const recommendation = recommendations[currentIdx];
-
-  useEffect(() => {
-    if (finished) return;
-    const interval = setInterval(() => {
-      setTimeLeft((remainingTime) => {
-        if (remainingTime <= 1) {
-          setFinished(true);
-          return 0;
-        }
-
-        return remainingTime - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [finished]);
-
-  useEffect(() => {
-    if (finished || showExplanation || questions.length === 0) return;
-
-    questionShownAtRef.current = Date.now();
-    setQuestionElapsedSeconds(0);
-
-    const interval = window.setInterval(() => {
-      setQuestionElapsedSeconds(Math.max(1, Math.round((Date.now() - questionShownAtRef.current) / 1000)));
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [currentIdx, finished, questions.length, showExplanation]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    questions.forEach((question, index) => {
-      if (servedQuestionIdsRef.current.has(question.id)) return;
-
-      const graphMetadata = recommendations[index]?.graph;
-      servedQuestionIdsRef.current.add(question.id);
-
-      void logStudentActivityEvent({
-        actorId: user.id,
-        actorRole: "student",
-        actorName: getStudentActorName(user),
-        targetUserId: user.id,
-        eventType: "graph_question_served",
-        questionId: question.id,
-        subjectId: question.subjectId,
-        topicId: question.topicId,
-        metadata: {
-          session_id: sessionIdRef.current,
-          test_type: "topic-wise",
-          order: index + 1,
-          from_question_id: graphMetadata?.fromQuestionId || null,
-          edge_weight: graphMetadata?.edgeWeight ?? null,
-          edge_kind: graphMetadata?.edgeKind ?? null,
-          recommendation_mode: graphMetadata?.mode || "seed",
-        },
-      });
-    });
-  }, [questions, recommendations, user]);
-
-  const handleSubmitAnswer = () => {
-    const q = questions[currentIdx];
-    if (!q || !isQuestionAnswered(q, selectedAnswer)) return;
-
-    const correct = isQuestionCorrect(q, selectedAnswer);
-    const earnedMarks = getEarnedMarks(q, selectedAnswer);
-    const timeSpentSeconds = Math.max(1, Math.round((Date.now() - questionShownAtRef.current) / 1000));
-    const review = buildQuestionReview(
-      q,
-      correct,
-      timeSpentSeconds,
-      recommendation?.graph?.mode === "remediation" ? recommendation.graph.remediationForQuestionId ?? null : null
-    );
-    const nextAttempt: AdaptiveSessionAttempt = {
-      questionId: q.id,
-      topicId: q.topicId,
-      difficulty: q.difficulty,
-      eloRating: q.eloRating,
-      correct,
-      timeSpentSeconds,
-      rapidGuessWarning: review.rapidGuessWarning,
-      remediationForQuestionId: review.remediationForQuestionId ?? null,
-    };
-    const nextSessionAttempts = [...sessionAttempts, nextAttempt];
-
-    setResults((prev) => [...prev, { correct, earnedMarks, maxMarks: q.marks }]);
-    setSubmittedAnswers((prev) => {
-      const next = [...prev];
-      next[currentIdx] = selectedAnswer;
-      return next;
-    });
-    addAnsweredQuestion(q.id, correct);
-    const baseElo = updateElo(practiceElo, q.eloRating, correct);
-    const newElo = correct ? Math.max(1000, baseElo - review.eloAdjustment) : baseElo;
-    setPracticeElo(newElo);
-    setStudentElo(newElo);
-    updateSubjectScore(q.subjectId, correct);
-    setSessionAttempts(nextSessionAttempts);
-    setQuestionReviews((prev) => {
-      const next = [...prev];
-      next[currentIdx] = review;
-      return next;
-    });
-
-    setShowExplanation(true);
-  };
-
-  const handleNext = () => {
-    if (currentIdx + 1 >= questionCount) {
-      setFinished(true);
-      return;
-    }
-
-    const nextIdx = currentIdx + 1;
-    const existingNextQuestion = questions[nextIdx];
-
-    if (!existingNextQuestion) {
-      const nextRecommendation = recommendNextBestAdaptiveQuestion({
-        subjectId,
-        topicId: topicId || null,
-        constrainToTopic: Boolean(topicId),
-        studentElo: practiceElo,
-        answeredQuestionIds: answeredQuestions,
-        sessionQuestionIds: new Set(questions.map((question) => question.id)),
-        sessionAttempts,
-      });
-
-      if (!nextRecommendation.question) {
-        setFinished(true);
-        return;
-      }
-
-      setQuestions((prev) => [...prev, nextRecommendation.question!]);
-      setSubmittedAnswers((prev) => [...prev, createEmptyAnswer(nextRecommendation.question!)]);
-      setQuestionReviews((prev) => [...prev, null]);
-      setRecommendations((prev) => [...prev, nextRecommendation]);
-      setCurrentIdx(nextIdx);
-      setSelectedAnswer(createEmptyAnswer(nextRecommendation.question));
-      setShowExplanation(false);
-      return;
-    }
-
-    setCurrentIdx(nextIdx);
-    setSelectedAnswer(createEmptyAnswer(existingNextQuestion));
-    setShowExplanation(false);
-  };
-
-  const handleSkipQuestion = () => {
-    const q = questions[currentIdx];
-    if (!q || showExplanation) return;
-
-    setSubmittedAnswers((prev) => {
-      const next = [...prev];
-      next[currentIdx] = createEmptyAnswer(q);
-      return next;
-    });
-
-    if (currentIdx + 1 >= questionCount) {
-      setFinished(true);
-      return;
-    }
-
-    const nextIdx = currentIdx + 1;
-    const existingNextQuestion = questions[nextIdx];
-
-    if (!existingNextQuestion) {
-      const nextRecommendation = recommendNextBestAdaptiveQuestion({
-        subjectId,
-        topicId: topicId || null,
-        constrainToTopic: Boolean(topicId),
-        studentElo: practiceElo,
-        answeredQuestionIds: answeredQuestions,
-        sessionQuestionIds: new Set(questions.map((question) => question.id)),
-        sessionAttempts,
-      });
-
-      if (!nextRecommendation.question) {
-        setFinished(true);
-        return;
-      }
-
-      setQuestions((prev) => [...prev, nextRecommendation.question!]);
-      setSubmittedAnswers((prev) => [...prev, createEmptyAnswer(nextRecommendation.question!)]);
-      setQuestionReviews((prev) => [...prev, null]);
-      setRecommendations((prev) => [...prev, nextRecommendation]);
-      setCurrentIdx(nextIdx);
-      setSelectedAnswer(createEmptyAnswer(nextRecommendation.question));
-      setShowExplanation(false);
-      return;
-    }
-
-    setCurrentIdx(nextIdx);
-    setSelectedAnswer(createEmptyAnswer(existingNextQuestion));
-    setShowExplanation(false);
-  };
-
-  useEffect(() => {
-    if (!finished || historySavedRef.current) return;
-
-    historySavedRef.current = true;
-    const correctCount = results.filter((result) => result.correct).length;
-    const totalMarks = results.reduce((sum, result) => sum + result.earnedMarks, 0);
-    const maxMarks = results.reduce((sum, result) => sum + result.maxMarks, 0);
-    const pathMetadata = buildGraphPathMetadata({
-      sessionId: sessionIdRef.current,
-      testType: "topic-wise",
-      questions,
-      recommendations,
-      results,
-      questionReviews,
-      subjectId,
-      topicId: topicId || null,
-    });
-
-    void (async () => {
-      await recordTestHistory({
-        test_type: "topic-wise",
-        subject_id: subjectId,
-        topic_id: topicId || null,
-        score: Number(totalMarks.toFixed(2)),
-        max_score: maxMarks,
-        questions_attempted: results.length,
-        correct_answers: correctCount,
-        total_questions: questions.length,
-        violations: 0,
-        duration_seconds: timerMinutes * 60 - timeLeft,
-        review_payload: buildTestReviewPayload({
-          questions,
-          answers: submittedAnswers,
-          questionReviews,
-        }),
-      });
-
-      if (!user) return;
-
-      await logStudentActivityEvent({
-        actorId: user.id,
-        actorRole: "student",
-        actorName: getStudentActorName(user),
-        targetUserId: user.id,
-        eventType: "graph_path_completed",
-        subjectId,
-        topicId: topicId || null,
-        metadata: pathMetadata,
-      });
-
-      await logStudentActivityEvent({
-        actorId: user.id,
-        actorRole: "student",
-        actorName: getStudentActorName(user),
-        targetUserId: user.id,
-        eventType: "practice_session_completed",
-        subjectId,
-        topicId: topicId || null,
-        metadata: {
-          ...pathMetadata,
-          question_reviews: questionReviews.filter((review): review is QuestionSessionReview => Boolean(review)),
-          total_warnings: questionReviews.filter((review) => review?.rapidGuessWarning).length,
-        },
-      });
-    })().catch((error) => {
-      console.warn("Could not persist topic-wise graph path", error);
-    });
-  }, [finished, questionReviews, questions, recordTestHistory, recommendations, results, subjectId, timeLeft, timerMinutes, topicId, user]);
-
-  if (questions.length === 0) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="container py-12 max-w-2xl">
-          <div className="bg-card border rounded-xl p-8 text-center space-y-4">
-            <AlertTriangle className="h-12 w-12 text-warning mx-auto" />
-            <h2 className="text-2xl font-bold">No questions available yet</h2>
-            <p className="text-muted-foreground">
-              This topic does not have a ready practice set right now. Pick another topic or open a full paper instead.
-            </p>
-            <div className="flex justify-center gap-3">
-              <Button variant="hero" onClick={() => setReviewMode(true)}>Review Answers</Button>
-              <Link to="/practice"><Button variant="outline">Back to Practice</Button></Link>
-              <Link to="/dashboard"><Button variant="outline">View Dashboard</Button></Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (finished) {
-    const correct = results.filter((result) => result.correct).length;
-    const totalMarks = results.reduce((sum, result) => sum + result.earnedMarks, 0);
-    const maxMarks = results.reduce((sum, result) => sum + result.maxMarks, 0);
-    const accuracy = results.length > 0 ? Math.round((correct / results.length) * 100) : 0;
-
-    if (reviewMode) {
-      return (
-        <TestReviewPage
-          title="Topic Test Review"
-          subtitle="Review your answers and see exactly where you made mistakes."
-          questions={questions}
-          answers={submittedAnswers}
-          questionReviews={questionReviews}
-          onExit={() => setReviewMode(false)}
-        />
-      );
-    }
-
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="container py-12 max-w-2xl">
-          <div className="bg-card border rounded-xl p-8 text-center space-y-6">
-            <CheckCircle2 className="h-12 w-12 text-success mx-auto" />
-            <h2 className="text-2xl font-bold">Topic Test Complete!</h2>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="bg-muted rounded-lg p-4">
-                <p className="text-2xl font-bold">{totalMarks.toFixed(2)}/{maxMarks}</p>
-                <p className="text-xs text-muted-foreground">Marks</p>
-              </div>
-              <div className="bg-muted rounded-lg p-4">
-                <p className="text-2xl font-bold">{correct}/{results.length}</p>
-                <p className="text-xs text-muted-foreground">Correct</p>
-              </div>
-              <div className="bg-muted rounded-lg p-4">
-                <p className="text-2xl font-bold">{accuracy}%</p>
-                <p className="text-xs text-muted-foreground">Accuracy</p>
-              </div>
-            </div>
-            <div className="flex justify-center gap-3">
-              <Button variant="hero" onClick={() => setReviewMode(true)}>Review Answers</Button>
-              <Link to="/practice"><Button variant="outline">Back to Practice</Button></Link>
-              <Link to="/dashboard"><Button variant="outline">View Dashboard</Button></Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const q = questions[currentIdx];
-  const mins = Math.floor(timeLeft / 60);
-  const secs = timeLeft % 60;
-
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-50 bg-card border-b px-4 py-3">
-        <div className="container flex items-center justify-between">
-          <h2 className="font-bold text-sm">Topic Test ({questionCount} selected) — Q{currentIdx + 1}/{questions.length}</h2>
-          <div className="flex items-center gap-3">
-            <span className="rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-              {questionElapsedSeconds}s on this question
-            </span>
-            <span className={`font-mono font-bold ${timeLeft < 60 ? 'text-destructive' : ''}`}>
-              <Timer className="h-4 w-4 inline mr-1" />
-              {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="container py-8 max-w-3xl">
-        <QuestionCard
-          question={q}
-          selectedAnswer={selectedAnswer}
-          onAnswerChange={(answer) => !showExplanation && setSelectedAnswer(answer)}
-          showExplanation={showExplanation}
-        />
-        <div className="mt-6 flex justify-end gap-3">
-          {!showExplanation ? (
-            <>
-              <Button variant="outline" onClick={handleSkipQuestion}>
-                Skip
-              </Button>
-              <Button variant="hero" onClick={handleSubmitAnswer} disabled={!isQuestionAnswered(q, selectedAnswer)}>
-                Check Answer
-              </Button>
-            </>
-          ) : (
-            <Button variant="hero" onClick={handleNext} className="gap-1">
-              {currentIdx + 1 < questionCount ? "Next" : "Finish"} <ArrowRight className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// Adaptive Test
-// ============================================================
-function AdaptiveTest({ subjectId, questionCount }: { subjectId: string; questionCount: number }) {
-  const {
-    user,
-    answeredQuestions,
-    addAnsweredQuestion,
-    studentElo,
-    setStudentElo,
-    updateSubjectScore,
-    recordTestHistory,
-  } = useStudentAuth();
-  const [adaptiveElo, setAdaptiveElo] = useState(studentElo);
-  const initialRecommendationRef = useRef<NextBestQuestionRecommendation>(
-    recommendNextBestAdaptiveQuestion({
-      subjectId,
-      studentElo,
-      answeredQuestionIds: answeredQuestions,
-    })
-  );
-  const [questions, setQuestions] = useState<Question[]>(() =>
-    initialRecommendationRef.current.question ? [initialRecommendationRef.current.question] : []
-  );
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<PracticeAnswer>(() => createEmptyAnswer(questions[0]));
-  const [submittedAnswers, setSubmittedAnswers] = useState<PracticeAnswer[]>(() =>
-    questions.map((question) => createEmptyAnswer(question))
-  );
-  const [sessionAttempts, setSessionAttempts] = useState<AdaptiveSessionAttempt[]>([]);
-  const [questionReviews, setQuestionReviews] = useState<Array<QuestionSessionReview | null>>(
-    () => (questions.length > 0 ? [null] : [])
-  );
-  const [recommendations, setRecommendations] = useState<NextBestQuestionRecommendation[]>(() =>
-    questions.length > 0 ? [initialRecommendationRef.current] : []
-  );
-  const [showExplanation, setShowExplanation] = useState(false);
-  const [results, setResults] = useState<PracticeResult[]>([]);
-  const [finished, setFinished] = useState(false);
-  const [reviewMode, setReviewMode] = useState(false);
-  const historySavedRef = useRef(false);
-  const sessionIdRef = useRef(createGraphSessionId());
-  const servedQuestionIdsRef = useRef(new Set<string>());
-  const questionShownAtRef = useRef(Date.now());
-  const [questionElapsedSeconds, setQuestionElapsedSeconds] = useState(0);
-  const recommendation = recommendations[currentIdx];
-
-  useEffect(() => {
-    if (finished || showExplanation || questions.length === 0) return;
-
-    questionShownAtRef.current = Date.now();
-    setQuestionElapsedSeconds(0);
-
-    const interval = window.setInterval(() => {
-      setQuestionElapsedSeconds(Math.max(1, Math.round((Date.now() - questionShownAtRef.current) / 1000)));
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [currentIdx, finished, questions.length, showExplanation]);
-
-  const handleSubmitAnswer = () => {
-    const q = questions[currentIdx];
-    if (!q || !isQuestionAnswered(q, selectedAnswer)) return;
-
-    const correct = isQuestionCorrect(q, selectedAnswer);
-    const earnedMarks = getEarnedMarks(q, selectedAnswer);
-    const timeSpentSeconds = Math.max(1, Math.round((Date.now() - questionShownAtRef.current) / 1000));
-    const review = buildQuestionReview(
-      q,
-      correct,
-      timeSpentSeconds,
-      recommendation?.graph?.mode === "remediation" ? recommendation.graph.remediationForQuestionId ?? null : null
-    );
-    const nextAttempt: AdaptiveSessionAttempt = {
-      questionId: q.id,
-      topicId: q.topicId,
-      difficulty: q.difficulty,
-      eloRating: q.eloRating,
-      correct,
-      timeSpentSeconds,
-      rapidGuessWarning: review.rapidGuessWarning,
-      remediationForQuestionId: review.remediationForQuestionId ?? null,
-    };
-    const nextSessionAttempts = [...sessionAttempts, nextAttempt];
-
-    setResults((prev) => [...prev, { correct, earnedMarks, maxMarks: q.marks }]);
-    setSubmittedAnswers((prev) => {
-      const next = [...prev];
-      next[currentIdx] = selectedAnswer;
-      return next;
-    });
-    addAnsweredQuestion(q.id, correct);
-    const baseElo = updateElo(adaptiveElo, q.eloRating, correct);
-    const newElo = correct ? Math.max(1000, baseElo - review.eloAdjustment) : baseElo;
-    setAdaptiveElo(newElo);
-    setStudentElo(newElo);
-    updateSubjectScore(q.subjectId, correct);
-    setSessionAttempts(nextSessionAttempts);
-    setQuestionReviews((prev) => {
-      const next = [...prev];
-      next[currentIdx] = review;
-      return next;
-    });
-
-    setShowExplanation(true);
-  };
-
-  const handleNext = () => {
-    if (currentIdx + 1 >= questionCount) {
-      setFinished(true);
-      return;
-    }
-
-    const nextIdx = currentIdx + 1;
-    const existingNextQuestion = questions[nextIdx];
-
-    if (!existingNextQuestion) {
-      const recommendation = recommendNextBestAdaptiveQuestion({
-        subjectId,
-        studentElo: adaptiveElo,
-        answeredQuestionIds: answeredQuestions,
-        sessionQuestionIds: new Set(questions.map((question) => question.id)),
-        sessionAttempts,
-      });
-
-      if (!recommendation.question) {
-        setFinished(true);
-        return;
-      }
-
-      setQuestions((prev) => [...prev, recommendation.question!]);
-      setSubmittedAnswers((prev) => [...prev, createEmptyAnswer(recommendation.question!)]);
-      setQuestionReviews((prev) => [...prev, null]);
-      setRecommendations((prev) => [...prev, recommendation]);
-      setCurrentIdx(nextIdx);
-      setSelectedAnswer(createEmptyAnswer(recommendation.question));
-      setShowExplanation(false);
-      return;
-    }
-
-    setCurrentIdx(nextIdx);
-    setSelectedAnswer(createEmptyAnswer(existingNextQuestion));
-    setShowExplanation(false);
-  };
-
-  const handleSkipQuestion = () => {
-    const q = questions[currentIdx];
-    if (!q || showExplanation) return;
-
-    setSubmittedAnswers((prev) => {
-      const next = [...prev];
-      next[currentIdx] = createEmptyAnswer(q);
-      return next;
-    });
-
-    if (currentIdx + 1 >= questionCount) {
-      setFinished(true);
-      return;
-    }
-
-    const nextIdx = currentIdx + 1;
-    const existingNextQuestion = questions[nextIdx];
-
-    if (!existingNextQuestion) {
-      const nextRecommendation = recommendNextBestAdaptiveQuestion({
-        subjectId,
-        studentElo: adaptiveElo,
-        answeredQuestionIds: answeredQuestions,
-        sessionQuestionIds: new Set(questions.map((question) => question.id)),
-        sessionAttempts,
-      });
-
-      if (!nextRecommendation.question) {
-        setFinished(true);
-        return;
-      }
-
-      setQuestions((prev) => [...prev, nextRecommendation.question!]);
-      setSubmittedAnswers((prev) => [...prev, createEmptyAnswer(nextRecommendation.question!)]);
-      setQuestionReviews((prev) => [...prev, null]);
-      setRecommendations((prev) => [...prev, nextRecommendation]);
-      setCurrentIdx(nextIdx);
-      setSelectedAnswer(createEmptyAnswer(nextRecommendation.question));
-      setShowExplanation(false);
-      return;
-    }
-
-    setCurrentIdx(nextIdx);
-    setSelectedAnswer(createEmptyAnswer(existingNextQuestion));
-    setShowExplanation(false);
-  };
-
-  useEffect(() => {
-    if (!finished || historySavedRef.current) return;
-
-    historySavedRef.current = true;
-    const correctCount = results.filter((result) => result.correct).length;
-    const totalMarks = results.reduce((sum, result) => sum + result.earnedMarks, 0);
-    const maxMarks = results.reduce((sum, result) => sum + result.maxMarks, 0);
-    const pathMetadata = buildGraphPathMetadata({
-      sessionId: sessionIdRef.current,
-      testType: "adaptive",
-      questions,
-      recommendations,
-      results,
-      questionReviews,
-      subjectId,
-      topicId: null,
-    });
-
-    void (async () => {
-      await recordTestHistory({
-        test_type: "adaptive",
-        subject_id: subjectId,
-        topic_id: null,
-        score: Number(totalMarks.toFixed(2)),
-        max_score: maxMarks,
-        questions_attempted: results.length,
-        correct_answers: correctCount,
-        total_questions: questions.length,
-        violations: 0,
-        duration_seconds: null,
-        review_payload: buildTestReviewPayload({
-          questions,
-          answers: submittedAnswers,
-          questionReviews,
-        }),
-      });
-
-      if (!user) return;
-
-      await logStudentActivityEvent({
-        actorId: user.id,
-        actorRole: "student",
-        actorName: getStudentActorName(user),
-        targetUserId: user.id,
-        eventType: "graph_path_completed",
-        subjectId,
-        topicId: null,
-        metadata: pathMetadata,
-      });
-
-      await logStudentActivityEvent({
-        actorId: user.id,
-        actorRole: "student",
-        actorName: getStudentActorName(user),
-        targetUserId: user.id,
-        eventType: "practice_session_completed",
-        subjectId,
-        topicId: null,
-        metadata: {
-          ...pathMetadata,
-          question_reviews: questionReviews.filter((review): review is QuestionSessionReview => Boolean(review)),
-          total_warnings: questionReviews.filter((review) => review?.rapidGuessWarning).length,
-        },
-      });
-    })().catch((error) => {
-      console.warn("Could not persist adaptive graph path", error);
-    });
-  }, [finished, questionReviews, questions, recordTestHistory, recommendations, results, subjectId, user]);
-
-  const correct = results.filter((result) => result.correct).length;
-  const totalAnswered = results.length;
-  const totalMarks = results.reduce((sum, result) => sum + result.earnedMarks, 0);
-  const maxMarks = results.reduce((sum, result) => sum + result.maxMarks, 0);
-  const q = questions[currentIdx];
-
-  if (!q && questions.length === 0) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="container py-12 max-w-2xl text-center space-y-4">
-          <AlertTriangle className="h-12 w-12 text-warning mx-auto" />
-          <h2 className="text-2xl font-bold">No adaptive questions available</h2>
-          <p className="text-muted-foreground">
-            Try another subject or reset your answered history to pull a fresh advanced adaptive set.
-          </p>
-          <Link to="/practice"><Button variant="hero">Back to Practice</Button></Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (finished || !q) {
-    if (reviewMode) {
-      return (
-        <TestReviewPage
-          title="Adaptive Practice Review"
-          subtitle="Review your advanced adaptive practice answers question by question."
-          questions={questions}
-          answers={submittedAnswers}
-          questionReviews={questionReviews}
-          onExit={() => setReviewMode(false)}
-        />
-      );
-    }
-
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="container py-12 max-w-2xl text-center space-y-4">
-          <h2 className="text-2xl font-bold">Adaptive Practice Complete!</h2>
-          <p className="text-muted-foreground">Great effort. The advanced engine adjusted every next question as you progressed.</p>
-          <p className="text-lg font-semibold">
-            Score: {totalMarks.toFixed(2)}/{maxMarks} ({totalAnswered > 0 ? Math.round((correct / totalAnswered) * 100) : 0}%)
-          </p>
-          <div className="flex justify-center gap-3">
-            <Button variant="hero" onClick={() => setReviewMode(true)}>Review Answers</Button>
-            <Link to="/practice"><Button variant="outline">Back to Practice</Button></Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-50 bg-card border-b px-4 py-3">
-        <div className="container flex items-center justify-between">
-          <h2 className="font-bold text-sm">Adaptive Practice (Advanced) ({questionCount} selected) — ELO: {adaptiveElo}</h2>
-          <div className="flex items-center gap-3">
-            <span className="rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-              {questionElapsedSeconds}s on this question
-            </span>
-            <span className="text-sm text-muted-foreground">{correct}/{totalAnswered} correct</span>
-          </div>
-        </div>
-      </div>
-      <div className="container py-8 max-w-3xl">
-        {recommendation && (
-          <div className="mb-6 rounded-xl border bg-muted/40 p-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold">Adaptive recommendation engine</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                  Target {recommendation.targetDifficulty} · ELO {recommendation.targetElo}
-                </span>
-              </div>
-            </div>
-            <div className="space-y-1 text-sm text-muted-foreground">
-              {recommendation.reasons.map((reason) => (
-                <p key={reason}>{reason}</p>
-              ))}
-            </div>
-          </div>
-        )}
-        <QuestionCard
-          question={q}
-          selectedAnswer={selectedAnswer}
-          onAnswerChange={(answer) => !showExplanation && setSelectedAnswer(answer)}
-          showExplanation={showExplanation}
-        />
-        <div className="flex justify-between mt-6">
-          <Link to="/practice"><Button variant="outline">Exit</Button></Link>
-          {!showExplanation ? (
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={handleSkipQuestion}>
-                Skip
-              </Button>
-              <Button variant="hero" onClick={handleSubmitAnswer} disabled={!isQuestionAnswered(q, selectedAnswer)}>
-                Check Answer
-              </Button>
-            </div>
-          ) : (
-            <Button variant="hero" onClick={handleNext} className="gap-1">
-              {currentIdx + 1 < questionCount ? "Next" : "Finish"} <ArrowRight className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
+// Shared Review Screen
 // Shared Review Screen
 // ============================================================
 function TestReviewPage({

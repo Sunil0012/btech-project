@@ -6,6 +6,7 @@ import { useStudentAuth } from "@/contexts/AuthContext";
 import { parseAssignmentDescription } from "@/lib/assignmentContent";
 import { logStudentActivityEvent } from "@/lib/activityEvents";
 import { getStudentAssignmentAttempt, submitAssignmentResult } from "@/lib/teacherSync";
+import { buildTestReviewPayload } from "@/lib/testReview";
 import {
   getAssignmentSubjectLabel,
   getQuestionsByAssignment,
@@ -152,8 +153,11 @@ function AssignmentAttemptPage() {
         }
 
         let nextElo = studentElo;
+        const answerObjects: Array<number | number[] | string | null> = [];
+        
         currentQuestions.forEach((question) => {
           const correct = isQuestionCorrect(question, currentAnswers[question.id] ?? null);
+          answerObjects.push(currentAnswers[question.id] ?? null);
           addAnsweredQuestion(question.id, correct);
           updateSubjectScore(question.subjectId, correct);
           nextElo = updateElo(nextElo, question.eloRating, correct);
@@ -161,6 +165,14 @@ function AssignmentAttemptPage() {
         setStudentElo(nextElo);
 
         try {
+          const reviewPayload = buildTestReviewPayload({
+            questions: currentQuestions,
+            answers: answerObjects,
+            attemptKind: currentAssignment.type === "test" ? "assignment-test" : "assignment-homework",
+            countsForStats: true,
+            countsForRating: true,
+          });
+
           await recordTestHistory({
             test_type: currentAssignment.type === "test" ? "assignment-test" : "assignment-homework",
             subject_id: currentAssignment.subject_id,
@@ -172,6 +184,7 @@ function AssignmentAttemptPage() {
             total_questions: result.totalQuestions,
             violations: violationCount,
             duration_seconds: Math.max(currentAssignment.timer_minutes * 60 - remainingTime, 0),
+            review_payload: reviewPayload,
           });
         } catch (error) {
           console.error("Could not record assignment history", error);

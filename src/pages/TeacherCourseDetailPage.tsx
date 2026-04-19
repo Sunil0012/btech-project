@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Copy, Download, ExternalLink, Layers3, Link2, Sparkles, Trash2, Users2, UserX, FolderOpen, FileText } from "lucide-react";
+import { Copy, Download, ExternalLink, Layers3, Link2, Sparkles, Trash2, Users2, UserX, FolderOpen, FileText, Home, BookOpen, ListTodo, HelpCircle, TrendingUp, Menu, X } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AssignmentBuilderModal } from "@/components/AssignmentBuilderModal";
 import { TeacherLayout } from "@/components/TeacherLayout";
@@ -13,8 +13,22 @@ import { parseAssignmentDescription } from "@/lib/assignmentContent";
 import { buildCourseInviteLink } from "@/lib/classroom";
 import { deleteCourseForSignedInTeacher, removeStudentFromCourseForSignedInTeacher } from "@/lib/classroomData";
 import { buildTeacherCourseSummaries, buildTeacherInsights, buildTeacherStudentSummaries, type TeacherStudentSummary } from "@/lib/teacherAnalytics";
+import { uploadCourseFile, ensureCourseFilesBucket } from "@/lib/courseFiles";
 import { teacherSupabase } from "@/integrations/supabase/teacher-client";
 import type { TeacherTables } from "@/integrations/supabase/teacher-types";
+
+type TabType = "home" | "modules" | "assignments" | "quizzes" | "insights" | "grades" | "people" | "files";
+
+const TAB_CONFIG: { id: TabType; label: string; icon: typeof Home }[] = [
+  { id: "home", label: "Home", icon: Home },
+  { id: "modules", label: "Modules", icon: BookOpen },
+  { id: "assignments", label: "Assignments", icon: ListTodo },
+  { id: "quizzes", label: "Quizzes", icon: HelpCircle },
+  { id: "insights", label: "Insights", icon: TrendingUp },
+  { id: "grades", label: "Grades", icon: FileText },
+  { id: "people", label: "People", icon: Users2 },
+  { id: "files", label: "Files", icon: FolderOpen },
+];
 
 function TeacherCourseDetailPage() {
   const { courseId } = useParams();
@@ -24,9 +38,10 @@ function TeacherCourseDetailPage() {
   const [selectedStudent, setSelectedStudent] = useState<TeacherStudentSummary | null>(null);
   const [removingStudentId, setRemovingStudentId] = useState<string | null>(null);
   const [deletingCourse, setDeletingCourse] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "assignments" | "people" | "files">((searchParams.get("tab") as any) || "overview");
+  const [activeTab, setActiveTab] = useState<TabType>((searchParams.get("tab") as TabType) || "home");
   const [courseFiles, setCourseFiles] = useState<any[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const redirectedMissingCourse = useRef(false);
 
   useEffect(() => {
@@ -156,26 +171,27 @@ function TeacherCourseDetailPage() {
     setUploadingFile(true);
 
     try {
-      // Upload to storage
-      const fileName = `${Date.now()}_${file.name}`;
-      const { data: uploadData, error: uploadError } = await teacherSupabase.storage
-        .from("course-files")
-        .upload(`${courseId}/${fileName}`, file);
+      // Ensure bucket exists
+      await ensureCourseFilesBucket();
 
-      if (uploadError) throw uploadError;
+      // Upload file to storage
+      const uploadResult = await uploadCourseFile(courseId, file, file.name);
 
-      // Get public URL
-      const { data: urlData } = teacherSupabase.storage
-        .from("course-files")
-        .getPublicUrl(`${courseId}/${fileName}`);
+      if (uploadResult?.error) {
+        throw uploadResult.error;
+      }
 
-      // Save file record
+      if (!uploadResult?.publicUrl) {
+        throw new Error("Failed to get public URL for uploaded file");
+      }
+
+      // Save file record to database
       const { error: insertError } = await teacherSupabase
         .from("course_files")
         .insert({
           course_id: courseId,
           file_name: file.name,
-          file_url: urlData.publicUrl,
+          file_url: uploadResult.publicUrl,
           uploaded_by: workspace.profile?.user_id || "",
         });
 
@@ -188,6 +204,7 @@ function TeacherCourseDetailPage() {
 
       await loadCourseFiles();
     } catch (error) {
+      console.error("Upload error:", error);
       toast({
         title: "Upload failed",
         description: error instanceof Error ? error.message : "Could not upload file.",
@@ -292,8 +309,7 @@ function TeacherCourseDetailPage() {
           </div>
         )
       ) : (
-        <>
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           <TeacherWorkspaceHeader
             eyebrow="Course Operations"
             title={course.title}
@@ -302,13 +318,6 @@ function TeacherCourseDetailPage() {
               `Join Code ${course.join_code}`,
               `${courseSummary.studentCount} learners`,
               `${courseSummary.assignmentCount} assignments`,
-              liveUpdatesEnabled
-                ? syncing
-                  ? "Syncing course data"
-                  : lastUpdatedAt
-                    ? `Updated ${new Date(lastUpdatedAt).toLocaleTimeString()}`
-                    : "Live sync active"
-                : "Live sync unavailable",
             ]}
             actions={
               <>
@@ -318,464 +327,260 @@ function TeacherCourseDetailPage() {
                 </Button>
                 <Button variant="outline" size="sm" className="gap-2" onClick={() => void handleCopyInviteLink()}>
                   <Link2 className="h-4 w-4" />
-                  Copy Invite Link
+                  Copy Invite
                 </Button>
-                {inviteLink && (
-                  <Button asChild variant="outline" size="sm" className="gap-2">
-                    <a href={inviteLink} target="_blank" rel="noreferrer">
-                      <ExternalLink className="h-4 w-4" />
-                      Open Invite
-                    </a>
-                  </Button>
-                )}
                 <AssignmentBuilderModal courses={[course]} onCreated={() => void refresh()} />
                 <Button variant="destructive" size="sm" className="gap-2" onClick={() => void handleDeleteCourse()} disabled={deletingCourse}>
-                  {deletingCourse ? <Trash2 className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
-                  {deletingCourse ? "Deleting..." : "Delete Course"}
+                  <Trash2 className="h-4 w-4" />
+                  {deletingCourse ? "Deleting..." : "Delete"}
                 </Button>
               </>
             }
-            aside={
-              <div className="space-y-4">
-                <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-primary">Average accuracy</p>
-                  <p className="mt-2 text-3xl font-bold text-foreground">{courseSummary.avgAccuracy}%</p>
-                </div>
-                <div className="rounded-xl border border-warning/10 bg-warning/5 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-warning">Completion</p>
-                  <p className="mt-2 text-3xl font-bold text-foreground">{courseSummary.completionRate}%</p>
-                </div>
-              </div>
-            }
           />
 
-          {/* Tab Navigation */}
-          <div className="flex flex-wrap gap-2 border-b bg-card rounded-t-lg px-6">
-            {[
-              { id: "overview" as const, label: "Overview", icon: Sparkles },
-              { id: "assignments" as const, label: "Assignments", icon: Layers3 },
-              { id: "people" as const, label: "People", icon: Users2 },
-              { id: "files" as const, label: "Files", icon: FolderOpen },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              return (
+          <div className="flex gap-6">
+            {/* Sidebar Navigation */}
+            <div className={`${sidebarOpen ? "w-56" : "w-20"} transition-all duration-300`}>
+              <div className="sticky top-6 rounded-xl border bg-card p-4 shadow-sm">
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors ${
-                    activeTab === tab.id
-                      ? "border-primary text-primary font-semibold"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="mb-4 flex w-full items-center justify-center rounded-lg bg-muted/50 p-2 hover:bg-muted"
                 >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
+                  {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
                 </button>
-              );
-            })}
-          </div>
 
-          {/* Tab Content */}
-          {activeTab === "overview" && (
-            <>
-            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-              <div className="relative bg-[linear-gradient(135deg,hsl(var(--primary))_0%,hsl(206_100%_62%)_42%,hsl(var(--accent)/0.92)_100%)] px-6 py-6 text-white">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.35),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.16),transparent_22%)]" />
-                <div className="relative flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <span className="inline-flex rounded-full bg-white/16 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em]">
-                      Course Workspace
-                    </span>
-                    <h3 className="mt-4 text-2xl font-semibold">{course.title}</h3>
-                    <p className="mt-2 max-w-xl text-sm leading-6 text-white/85">
-                      {course.description || "No course description added yet."}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-white/20 bg-white/12 px-4 py-3 text-right backdrop-blur">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-white/70">Join code</p>
-                    <p className="mt-2 text-xl font-bold">{course.join_code}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-4 p-6 md:grid-cols-4">
-                <div className="rounded-xl border bg-muted/35 p-4">
-                  <p className="text-sm text-muted-foreground">Students</p>
-                  <p className="mt-2 text-3xl font-bold text-foreground">{courseSummary.studentCount}</p>
-                </div>
-                <div className="rounded-xl border bg-muted/35 p-4">
-                  <p className="text-sm text-muted-foreground">Assignments</p>
-                  <p className="mt-2 text-3xl font-bold text-foreground">{courseSummary.assignmentCount}</p>
-                </div>
-                <div className="rounded-xl border bg-muted/35 p-4">
-                  <p className="text-sm text-muted-foreground">Completion</p>
-                  <p className="mt-2 text-3xl font-bold text-foreground">{courseSummary.completionRate}%</p>
-                </div>
-                <div className="rounded-xl border bg-muted/35 p-4">
-                  <p className="text-sm text-muted-foreground">Outstanding items</p>
-                  <p className="mt-2 text-3xl font-bold text-foreground">{outstandingAssignments}</p>
-                </div>
+                <nav className="space-y-2">
+                  {TAB_CONFIG.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => {
+                          setActiveTab(tab.id);
+                          setSearchParams({ tab: tab.id });
+                        }}
+                        className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                          isActive
+                            ? "bg-primary/10 text-primary border border-primary/20"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        {sidebarOpen && <span className="text-left">{tab.label}</span>}
+                      </button>
+                    );
+                  })}
+                </nav>
               </div>
             </div>
 
-            <div className="rounded-xl border bg-card p-6 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Course desk</p>
-              <h3 className="mt-2 text-2xl font-semibold text-foreground">Teacher operating view</h3>
-              <div className="mt-5 space-y-4">
-                <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
-                  <p className="text-sm font-semibold text-foreground">Course health</p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {courseSummary.studentCount > 0
-                      ? `${courseSummary.studentCount} learners are connected to this course and ${courseSummary.completionRate}% of assigned work is complete.`
-                      : "No learners are enrolled yet. Share the join code to start building the roster."}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-warning/10 bg-warning/5 p-4">
-                  <p className="text-sm font-semibold text-foreground">Recommended next move</p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {courseInsights.suggestedAssignments[0] || "Create the next assignment once this course starts generating topic-level performance data."}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-success/10 bg-success/5 p-4">
-                  <p className="text-sm font-semibold text-foreground">Top learner signal</p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {topLearner
-                      ? `${topLearner.name} is leading this course at ${topLearner.accuracy}% accuracy and ${topLearner.completionRate}% completion.`
-                      : "A top learner will appear here once the course has enough activity."}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-                  <p className="text-sm font-semibold text-foreground">Roster control</p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Open a student profile to review visual progress, or remove a learner from this course if they should no longer have access.
-                  </p>
-                  <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-rose-200 bg-background px-3 py-1.5 text-xs font-semibold text-rose-600">
-                    <UserX className="h-3.5 w-3.5" />
-                    Teacher-managed enrollment removal enabled
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-              <div className="rounded-xl border bg-card p-6 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-primary">Course intelligence brief</p>
-                    <h3 className="mt-2 text-xl font-semibold text-foreground">What this classroom needs next</h3>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-primary/10 bg-primary/5 p-4">
-                  <p className="text-sm font-semibold text-foreground">Weak topics across course</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {courseInsights.weakTopicsAcrossClass.map((topic) => (
-                      <span key={topic} className="rounded-full border border-primary/20 bg-card px-3 py-1.5 text-xs font-medium text-primary">
-                        {topic}
-                      </span>
-                    ))}
-                    {courseInsights.weakTopicsAcrossClass.length === 0 && (
-                      <span className="text-sm text-muted-foreground">No strong weak-topic pattern yet.</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-warning/10 bg-warning/5 p-4">
-                  <p className="text-sm font-semibold text-foreground">Suggested assignment next</p>
-                  <div className="mt-3 space-y-2 text-sm leading-6 text-muted-foreground">
-                    {courseInsights.suggestedAssignments.map((item) => (
-                      <p key={item}>{item}</p>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border bg-card p-6 shadow-sm">
-              <h3 className="text-xl font-semibold text-foreground">Course spotlight</h3>
-              <div className="mt-5 space-y-4">
-                <div className="rounded-xl border bg-destructive/5 p-4">
-                  <p className="text-sm font-semibold text-foreground">Needs support</p>
-                  <div className="mt-2 space-y-2 text-sm leading-6 text-muted-foreground">
-                    {courseInsights.focusStudents.map((student) => (
-                      <p key={student}>{student}</p>
-                    ))}
-                    {courseInsights.focusStudents.length === 0 && <p>No learners are flagged yet.</p>}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border bg-success/5 p-4">
-                  <p className="text-sm font-semibold text-foreground">Leading performers</p>
-                  <div className="mt-2 space-y-2 text-sm leading-6 text-muted-foreground">
-                    {courseInsights.topPerformers.map((student) => (
-                      <p key={student}>{student}</p>
-                    ))}
-                    {courseInsights.topPerformers.length === 0 && <p>No top-performer trend yet.</p>}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-            <div className="rounded-xl border bg-card p-6 shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning/10 text-warning">
-                  <Layers3 className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-foreground">Assignments in this course</h3>
-                  <p className="text-sm text-muted-foreground">Review active work and submission counts by assignment.</p>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {courseAssignments.map((assignment) => {
-                  const submissionCount = courseSubmissions.filter((submission) => submission.assignment_id === assignment.id).length;
-                  const assignmentContent = parseAssignmentDescription(assignment.description);
-                  return (
-                    <div key={assignment.id} className="rounded-xl border bg-muted/35 p-4">
-                      <div className="flex items-center justify-between gap-4">
+            {/* Main Content Area */}
+            <div className="flex-1 space-y-6">
+              {activeTab === "home" && (
+                <div className="space-y-6">
+                  <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                    <div className="relative bg-[linear-gradient(135deg,hsl(var(--primary))_0%,hsl(206_100%_62%)_42%,hsl(var(--accent)/0.92)_100%)] px-6 py-6 text-white">
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.35),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.16),transparent_22%)]" />
+                      <div className="relative flex flex-wrap items-start justify-between gap-4">
                         <div>
-                          <p className="font-semibold text-foreground">{assignment.title}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">{assignmentContent.body || "No assignment description provided."}</p>
-                        </div>
-                        <span className="rounded-full border border-primary/15 bg-card px-3 py-1 text-xs font-semibold text-primary">
-                          {assignment.type === "test" ? "Assessment" : "Homework"}
-                        </span>
-                      </div>
-
-                      {assignmentContent.attachments.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {assignmentContent.attachments.map((file) => (
-                            <a
-                              key={`${assignment.id}-${file.name}`}
-                              href={file.dataUrl}
-                              download={file.name}
-                              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-                            >
-                              <Download className="h-3.5 w-3.5 text-primary" />
-                              {file.name}
-                            </a>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-                        <div className="rounded-xl border bg-card p-3">
-                          <p className="text-muted-foreground">Questions</p>
-                          <p className="mt-1 font-semibold text-foreground">{assignment.question_count}</p>
-                        </div>
-                        <div className="rounded-xl border bg-card p-3">
-                          <p className="text-muted-foreground">Timer</p>
-                          <p className="mt-1 font-semibold text-foreground">{assignment.timer_minutes} min</p>
-                        </div>
-                        <div className="rounded-xl border bg-card p-3">
-                          <p className="text-muted-foreground">Submissions</p>
-                          <p className="mt-1 font-semibold text-foreground">{submissionCount}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {courseAssignments.length === 0 && (
-                  <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
-                    No assignments yet for this course.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="rounded-xl border bg-card p-6 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Users2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-foreground">Student roster</h3>
-                    <p className="text-sm text-muted-foreground">Review accuracy, assignment completion, ELO, course activity, open visual student profiles, and remove learners when needed.</p>
-                  </div>
-                </div>
-              </div>
-              <TeacherRosterTable
-                students={courseStudents}
-                onSelectStudent={setSelectedStudent}
-                onRemoveStudent={(student) => void handleRemoveStudent(student)}
-                removingStudentId={removingStudentId}
-              />
-            </div>
-          </section>
-            </>
-          )}
-
-          {/* Assignments Tab */}
-          {activeTab === "assignments" && (
-            <section className="rounded-xl border bg-card p-6 shadow-sm">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning/10 text-warning">
-                  <Layers3 className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-semibold text-foreground">Assignments in this course</h3>
-                  <p className="text-sm text-muted-foreground">Review active work and submission counts by assignment.</p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {courseAssignments.map((assignment) => {
-                  const submissionCount = courseSubmissions.filter((submission) => submission.assignment_id === assignment.id).length;
-                  const assignmentContent = parseAssignmentDescription(assignment.description);
-                  return (
-                    <div key={assignment.id} className="rounded-xl border bg-muted/35 p-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="font-semibold text-foreground">{assignment.title}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">{assignmentContent.body || "No assignment description provided."}</p>
-                        </div>
-                        <span className="rounded-full border border-primary/15 bg-card px-3 py-1 text-xs font-semibold text-primary">
-                          {assignment.type === "test" ? "Assessment" : "Homework"}
-                        </span>
-                      </div>
-
-                      {assignmentContent.attachments.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {assignmentContent.attachments.map((file) => (
-                            <a
-                              key={`${assignment.id}-${file.name}`}
-                              href={file.dataUrl}
-                              download={file.name}
-                              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-                            >
-                              <Download className="h-3.5 w-3.5 text-primary" />
-                              {file.name}
-                            </a>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-                        <div className="rounded-xl border bg-card p-3">
-                          <p className="text-muted-foreground">Questions</p>
-                          <p className="mt-1 font-semibold text-foreground">{assignment.question_count}</p>
-                        </div>
-                        <div className="rounded-xl border bg-card p-3">
-                          <p className="text-muted-foreground">Timer</p>
-                          <p className="mt-1 font-semibold text-foreground">{assignment.timer_minutes} min</p>
-                        </div>
-                        <div className="rounded-xl border bg-card p-3">
-                          <p className="text-muted-foreground">Submissions</p>
-                          <p className="mt-1 font-semibold text-foreground">{submissionCount}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {courseAssignments.length === 0 && (
-                  <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">
-                    No assignments yet for this course.
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* People Tab */}
-          {activeTab === "people" && (
-            <section className="space-y-4">
-              <div className="rounded-xl border bg-card p-6 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Users2 className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-foreground">Student roster</h3>
-                    <p className="text-sm text-muted-foreground">Review accuracy, assignment completion, ELO, course activity, open visual student profiles, and remove learners when needed.</p>
-                  </div>
-                </div>
-              </div>
-              <TeacherRosterTable
-                students={courseStudents}
-                onSelectStudent={setSelectedStudent}
-                onRemoveStudent={(student) => void handleRemoveStudent(student)}
-                removingStudentId={removingStudentId}
-              />
-            </section>
-          )}
-
-          {/* Files Tab */}
-          {activeTab === "files" && (
-            <section className="rounded-xl border bg-card p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-4 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 text-accent">
-                    <FolderOpen className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold text-foreground">Course files</h3>
-                    <p className="text-sm text-muted-foreground">Share resources and materials with your students.</p>
-                  </div>
-                </div>
-                <label>
-                  <input
-                    type="file"
-                    onChange={(e) => void handleUploadFile(e)}
-                    disabled={uploadingFile}
-                    className="hidden"
-                  />
-                  <Button
-                    asChild
-                    variant="hero"
-                    size="sm"
-                    className="gap-2 cursor-pointer"
-                    disabled={uploadingFile}
-                  >
-                    <span>
-                      {uploadingFile ? "Uploading..." : "Upload File"}
-                    </span>
-                  </Button>
-                </label>
-              </div>
-
-              {courseFiles.length === 0 ? (
-                <div className="rounded-lg border border-dashed p-8 text-center">
-                  <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50" />
-                  <p className="text-muted-foreground">No files shared yet.</p>
-                  <p className="text-sm text-muted-foreground">Upload files to share them with your students.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {courseFiles.map((file) => (
-                    <a
-                      key={file.id}
-                      href={file.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between border rounded-lg p-4 hover:bg-muted/50 transition-colors group"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="font-medium truncate group-hover:text-primary">{file.file_name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Uploaded {new Date(file.created_at).toLocaleDateString()}
+                          <span className="inline-flex rounded-full bg-white/16 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em]">
+                            Course Overview
+                          </span>
+                          <h3 className="mt-4 text-2xl font-semibold">{course.title}</h3>
+                          <p className="mt-2 max-w-xl text-sm leading-6 text-white/85">
+                            {course.description || "No course description added yet."}
                           </p>
                         </div>
                       </div>
-                      <Download className="h-4 w-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
-                    </a>
-                  ))}
+                    </div>
+
+                    <div className="grid gap-4 p-6 md:grid-cols-4">
+                      <div className="rounded-xl border bg-muted/35 p-4">
+                        <p className="text-sm text-muted-foreground">Students</p>
+                        <p className="mt-2 text-3xl font-bold text-foreground">{courseSummary.studentCount}</p>
+                      </div>
+                      <div className="rounded-xl border bg-muted/35 p-4">
+                        <p className="text-sm text-muted-foreground">Assignments</p>
+                        <p className="mt-2 text-3xl font-bold text-foreground">{courseSummary.assignmentCount}</p>
+                      </div>
+                      <div className="rounded-xl border bg-muted/35 p-4">
+                        <p className="text-sm text-muted-foreground">Completion</p>
+                        <p className="mt-2 text-3xl font-bold text-foreground">{courseSummary.completionRate}%</p>
+                      </div>
+                      <div className="rounded-xl border bg-muted/35 p-4">
+                        <p className="text-sm text-muted-foreground">Avg Accuracy</p>
+                        <p className="mt-2 text-3xl font-bold text-foreground">{courseSummary.avgAccuracy}%</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
-            </section>
-          )}
-        </div>
+
+              {activeTab === "modules" && (
+                <div className="rounded-xl border bg-card p-6 shadow-sm text-center text-muted-foreground">
+                  <BookOpen className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                  <p>Modules section coming soon</p>
+                </div>
+              )}
+
+              {activeTab === "assignments" && (
+                <div className="space-y-4">
+                  {courseAssignments.length > 0 ? (
+                    courseAssignments.map((assignment) => {
+                      const submissionCount = courseSubmissions.filter(
+                        (submission) => submission.assignment_id === assignment.id
+                      ).length;
+                      const completionRate =
+                        courseSummary.studentCount > 0
+                          ? Math.round((submissionCount / courseSummary.studentCount) * 100)
+                          : 0;
+
+                      return (
+                        <div key={assignment.id} className="rounded-xl border bg-card p-4 shadow-sm">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-foreground">{assignment.title}</h4>
+                              <p className="mt-2 text-sm text-muted-foreground">
+                                {submissionCount} / {courseSummary.studentCount} students submitted
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {completionRate}% complete
+                              </p>
+                            </div>
+                            <Button asChild variant="outline" size="sm">
+                              <a href={`/teacher/assignments/${assignment.id}`}>View</a>
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-xl border border-dashed bg-card p-6 text-center text-muted-foreground">
+                      No assignments yet
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === "quizzes" && (
+                <div className="rounded-xl border bg-card p-6 shadow-sm text-center text-muted-foreground">
+                  <HelpCircle className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                  <p>Quizzes section coming soon</p>
+                </div>
+              )}
+
+              {activeTab === "insights" && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border bg-card p-6 shadow-sm">
+                    <h3 className="text-xl font-semibold mb-4">Student Progress Analytics</h3>
+                    <div className="space-y-3">
+                      {courseStudents.length > 0 ? (
+                        courseStudents.map((student) => (
+                          <div key={student.userId} className="rounded-lg border bg-muted/30 p-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <p className="font-semibold text-foreground">{student.name}</p>
+                                <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                                  <div>
+                                    <p className="text-muted-foreground text-xs">Accuracy</p>
+                                    <p className="font-semibold text-foreground">{student.accuracy}%</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground text-xs">Completion</p>
+                                    <p className="font-semibold text-foreground">{student.completionRate}%</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground text-xs">Risk</p>
+                                    <p className={`font-semibold ${student.riskLevel === 'high' ? 'text-red-600' : student.riskLevel === 'medium' ? 'text-yellow-600' : 'text-green-600'}`}>
+                                      {student.riskLevel}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedStudent(student)}
+                              >
+                                View
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-center text-muted-foreground">No students enrolled yet</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "grades" && (
+                <div className="rounded-xl border bg-card p-6 shadow-sm text-center text-muted-foreground">
+                  <FileText className="mx-auto mb-2 h-8 w-8 opacity-50" />
+                  <p>Grades section coming soon</p>
+                </div>
+              )}
+
+              {activeTab === "people" && (
+                <div className="rounded-xl border bg-card shadow-sm">
+                  <TeacherRosterTable
+                    students={courseStudents}
+                    onSelectStudent={setSelectedStudent}
+                    onRemoveStudent={(student) => void handleRemoveStudent(student)}
+                    removingStudentId={removingStudentId}
+                  />
+                </div>
+              )}
+
+              {activeTab === "files" && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border bg-card p-6 shadow-sm">
+                    <h3 className="text-lg font-semibold mb-4">Course Files</h3>
+                    <div className="mb-6">
+                      <label className="block">
+                        <span className="rounded-lg border-2 border-dashed border-border p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                          <input
+                            type="file"
+                            onChange={(e) => void handleUploadFile(e)}
+                            disabled={uploadingFile}
+                            className="hidden"
+                          />
+                          <div>
+                            <p className="font-medium text-foreground">
+                              {uploadingFile ? "Uploading..." : "Click to upload a file"}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              PDF, images, documents up to 50MB
+                            </p>
+                          </div>
+                        </span>
+                      </label>
+                    </div>
+
+                    {courseFiles.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm">Uploaded Files</h4>
+                        {courseFiles.map((file) => (
+                          <a
+                            key={file.id}
+                            href={file.file_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 hover:bg-muted/50 transition-colors"
+                          >
+                            <Download className="h-4 w-4 text-primary" />
+                            <span className="text-sm font-medium text-foreground">{file.file_name}</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
           <TeacherStudentProfileDialog
             student={selectedStudent}
@@ -788,7 +593,7 @@ function TeacherCourseDetailPage() {
             open={Boolean(selectedStudent)}
             onOpenChange={(open) => !open && setSelectedStudent(null)}
           />
-        </>
+        </div>
       )}
     </TeacherLayout>
   );

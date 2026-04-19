@@ -1,11 +1,24 @@
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, BarChart3, GraduationCap, Menu, X, LogIn, LogOut, User, Settings, Moon, Sun, Brain, ClipboardList, Users } from "lucide-react";
+import { BookOpen, BarChart3, GraduationCap, Menu, X, LogIn, LogOut, User, Settings, Moon, Sun, Brain, ClipboardList, Users, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RecentActivityDropdown } from "@/components/RecentActivityDropdown";
 import { useStudentAuth, useTeacherAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/components/ThemeProvider";
 import { useState } from "react";
 
-export function Navbar() {
+interface ActivityItem {
+  id: string;
+  label: string;
+  detail: string;
+  timestamp?: string;
+}
+
+interface NavbarProps {
+  teacherActivity?: ActivityItem[];
+  activityLoading?: boolean;
+}
+
+export function Navbar({ teacherActivity = [], activityLoading = false }: NavbarProps) {
   const location = useLocation();
   const studentAuth = useStudentAuth();
   const teacherAuth = useTeacherAuth();
@@ -32,6 +45,7 @@ export function Navbar() {
     { to: "/subjects", label: "Subjects", icon: BookOpen },
     { to: "/practice", label: "Practice", icon: GraduationCap },
     { to: "/dashboard", label: "Dashboard", icon: BarChart3 },
+    { to: "/insights", label: "Insights", icon: Sparkles },
     { to: "/history", label: "History", icon: ClipboardList },
     { to: "/ai-coach", label: "Coach", icon: Brain },
   ];
@@ -87,6 +101,9 @@ export function Navbar() {
 
           {user ? (
             <>
+              {role === "teacher" && (
+                <RecentActivityDropdown activity={teacherActivity} loading={activityLoading} />
+              )}
               <Link to={settingsPath}>
                 <Button variant="ghost" size="icon" className="h-9 w-9">
                   <Settings className="h-4 w-4" />

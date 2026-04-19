@@ -11,6 +11,7 @@ import SubjectsPage from "./pages/SubjectsPage";
 import TopicNotesPage from "./pages/TopicNotesPage";
 import PracticePage from "./pages/PracticePage";
 import DashboardPage from "./pages/DashboardPage";
+import InsightsPage from "./pages/InsightsPage";
 import TestHistoryPage from "./pages/TestHistoryPage";
 import AICoachPage from "./pages/AICoachPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -54,15 +55,16 @@ const App = () => (
               <Route path="/teacher/signup" element={<TeacherSignupPage />} />
               <Route path="/student" element={<Navigate to="/student/login" replace />} />
               <Route path="/teacher" element={<Navigate to="/teacher/login" replace />} />
-              <Route path="/subjects" element={<ProtectedRoute allowedRoles={["student"]} requireCourse><SubjectsPage /></ProtectedRoute>} />
-              <Route path="/subjects/:subjectId" element={<ProtectedRoute allowedRoles={["student"]} requireCourse><SubjectsPage /></ProtectedRoute>} />
-              <Route path="/subjects/:subjectId/:topicId/notes" element={<ProtectedRoute allowedRoles={["student"]} requireCourse><TopicNotesPage /></ProtectedRoute>} />
-              <Route path="/practice" element={<ProtectedRoute allowedRoles={["student"]} requireCourse><PracticePage /></ProtectedRoute>} />
+              <Route path="/subjects" element={<ProtectedRoute allowedRoles={["student"]}><SubjectsPage /></ProtectedRoute>} />
+              <Route path="/subjects/:subjectId" element={<ProtectedRoute allowedRoles={["student"]}><SubjectsPage /></ProtectedRoute>} />
+              <Route path="/subjects/:subjectId/:topicId/notes" element={<ProtectedRoute allowedRoles={["student"]}><TopicNotesPage /></ProtectedRoute>} />
+              <Route path="/practice" element={<ProtectedRoute allowedRoles={["student"]}><PracticePage /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute allowedRoles={["student"]}><DashboardPage /></ProtectedRoute>} />
+              <Route path="/insights" element={<ProtectedRoute allowedRoles={["student"]}><InsightsPage /></ProtectedRoute>} />
               <Route path="/history" element={<ProtectedRoute allowedRoles={["student"]}><TestHistoryPage /></ProtectedRoute>} />
-              <Route path="/ai-coach" element={<ProtectedRoute allowedRoles={["student"]} requireCourse><AICoachPage /></ProtectedRoute>} />
+              <Route path="/ai-coach" element={<ProtectedRoute allowedRoles={["student"]}><AICoachPage /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute allowedRoles={["student"]}><SettingsPage /></ProtectedRoute>} />
-              <Route path="/assignments/:assignmentId" element={<ProtectedRoute allowedRoles={["student"]} requireCourse><AssignmentAttemptPage /></ProtectedRoute>} />
+              <Route path="/assignments/:assignmentId" element={<ProtectedRoute allowedRoles={["student"]}><AssignmentAttemptPage /></ProtectedRoute>} />
               <Route path="/student/courses/:courseId" element={<ProtectedRoute allowedRoles={["student"]}><StudentCourseDetailPage /></ProtectedRoute>} />
               <Route path="/join-course/:joinCode" element={<ProtectedRoute allowedRoles={["student"]}><StudentCourseInvitePage /></ProtectedRoute>} />
               <Route path="/teacher/dashboard" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherDashboardPage /></ProtectedRoute>} />

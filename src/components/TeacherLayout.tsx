@@ -3,16 +3,28 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { useTeacherAuth } from "@/contexts/AuthContext";
+import { useTeacherWorkspace } from "@/hooks/useTeacherWorkspace";
+import { buildRecentTeacherActivity } from "@/lib/teacherAnalytics";
 import { toast } from "@/hooks/use-toast";
 
 export function TeacherLayout({ children }: { children: ReactNode }) {
   const { user, teacherCourses, profile, refreshClassroom, classroomError, classroomReady } = useTeacherAuth();
+  const { workspace, loading } = useTeacherWorkspace();
   const [repairingWorkspace, setRepairingWorkspace] = useState(false);
   const todayLabel = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
   }).format(new Date());
+
+  // Build activity data for navbar
+  const teacherActivity = buildRecentTeacherActivity({
+    enrollments: workspace.enrollments,
+    assignments: workspace.assignments,
+    submissions: workspace.submissions,
+    students: workspace.students,
+    tests: workspace.testHistoryRows,
+  });
 
   const handleRepairWorkspace = async () => {
     setRepairingWorkspace(true);
@@ -36,7 +48,7 @@ export function TeacherLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
+      <Navbar teacherActivity={teacherActivity} activityLoading={loading} />
 
       <main className="teacher-portal bg-[radial-gradient(circle_at_top_left,_hsl(var(--primary)/0.10),_transparent_28%),radial-gradient(circle_at_top_right,_hsl(var(--accent)/0.08),_transparent_26%),linear-gradient(180deg,_hsl(var(--background)),_hsl(var(--muted)/0.18))] pb-10">
         <div className="container space-y-5 py-6 md:py-8">
@@ -66,3 +78,4 @@ export function TeacherLayout({ children }: { children: ReactNode }) {
     </div>
   );
 }
+

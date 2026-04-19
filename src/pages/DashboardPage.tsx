@@ -4,10 +4,11 @@ import { Footer } from "@/components/Footer";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { GateScorePrediction } from "@/components/GateScorePrediction";
 import { JoinCourseModal } from "@/components/JoinCourseModal";
+import { StudentTopicMasteryPanel } from "@/components/StudentTopicMasteryPanel";
 import { useStudentAuth } from "@/contexts/AuthContext";
 import { useStudentAssignments } from "@/hooks/useStudentAssignments";
 import { visibleSubjects } from "@/data/subjects";
-import { getQuestionsBySubject, questions as allQuestions } from "@/data/questions";
+import { getQuestionById, getQuestionsBySubject, questions as allQuestions } from "@/data/questions";
 import { availableFullTests } from "@/data/fullTests";
 import { getAssignmentSubjectLabel } from "@/lib/classroom";
 import { studentSupabase } from "@/integrations/supabase/student-client";
@@ -30,6 +31,7 @@ import {
 export default function DashboardPage() {
   const { user, studentElo, subjectScores, answeredQuestions, enrolledCourses, hasRequiredCourse, leaveCourse } = useStudentAuth();
   const [testHistory, setTestHistory] = useState<StudentTables<"test_history">[]>([]);
+  const [userProgress, setUserProgress] = useState<StudentTables<"user_progress">[]>([]);
   const [streak, setStreak] = useState(0);
   const [aiInsights, setAiInsights] = useState<AIInsightResult | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
@@ -54,6 +56,14 @@ export default function DashboardPage() {
       });
 
     studentSupabase
+      .from("user_progress")
+      .select("*")
+      .eq("user_id", user.id)
+      .then(({ data }) => {
+        if (data) setUserProgress(data);
+      });
+
+    studentSupabase
       .from("profiles")
       .select("streak_count")
       .eq("user_id", user.id)
@@ -67,6 +77,7 @@ export default function DashboardPage() {
   const totalCorrect = Object.values(subjectScores).reduce((a, s) => a + s.correct, 0);
   const overallAccuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
   const totalQuestions = allQuestions.length;
+  const solvedCoveragePercent = totalQuestions > 0 ? (answeredQuestions.size / totalQuestions) * 100 : 0;
   const totalTopicCount = visibleSubjects.reduce((sum, subject) => sum + subject.topics.length, 0);
   const masteryThresholds = useMemo(() => {
     if (studentElo >= 1700) return { weak: 68, strong: 84, minAttempts: 8 };
@@ -153,6 +164,39 @@ export default function DashboardPage() {
     }));
 
   const accuracyRadial = [{ name: "Accuracy", value: overallAccuracy, fill: "hsl(var(--primary))" }];
+  const solvedDifficultyBreakdown = useMemo(() => {
+    const counts = { easy: 0, medium: 0, hard: 0 };
+
+    answeredQuestions.forEach((questionId) => {
+      const question = getQuestionById(questionId);
+      if (!question) return;
+      counts[question.difficulty] += 1;
+    });
+
+    return counts;
+  }, [answeredQuestions]);
+
+  const topicMasteryGraphData = useMemo(() => {
+    return userProgress
+      .filter((progress) => Boolean(progress.topic_id) && progress.total > 0)
+      .map((progress) => {
+        const subject = visibleSubjects.find((candidate) => candidate.id === progress.subject_id);
+        const topic = subject?.topics.find((candidate) => candidate.id === progress.topic_id);
+        const accuracy = progress.total > 0 ? Math.round((progress.correct / progress.total) * 100) : 0;
+        const status =
+          accuracy >= 75 ? "strong" : accuracy >= 55 ? "developing" : "weak";
+
+        return {
+          id: progress.topic_id || `${progress.subject_id}-topic`,
+          label: topic?.name || progress.topic_id || "Unknown topic",
+          subjectLabel: subject?.name || progress.subject_id || "General",
+          accuracy,
+          attempts: progress.total,
+          status,
+        };
+      })
+      .sort((left, right) => right.attempts - left.attempts || right.accuracy - left.accuracy);
+  }, [userProgress]);
 
   // Recommended next action
   const getRecommendation = () => {
@@ -381,7 +425,7 @@ export default function DashboardPage() {
           </ScrollReveal>
 
           <ScrollReveal delay={180}>
-            <Link to="/dashboard" className="block">
+            <Link to="/insights" className="block">
               <div className="bg-card border rounded-xl p-5 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer group">
                 <div className="h-10 w-10 rounded-lg bg-warning/10 flex items-center justify-center mb-3">
                   <BarChart3 className="h-5 w-5 text-warning" />
@@ -550,6 +594,7 @@ export default function DashboardPage() {
             overallAccuracy={overallAccuracy}
             completion={completion}
             subjectPerformance={subjectPerformance}
+            testHistory={testHistory}
           />
         </ScrollReveal>
 
@@ -593,6 +638,19 @@ export default function DashboardPage() {
             </ScrollReveal>
           ))}
         </div>
+
+        <ScrollReveal delay={40}>
+          <div className="mb-8">
+            <StudentTopicMasteryPanel
+              totalSolved={answeredQuestions.size}
+              totalSubmissions={totalAnswered}
+              acceptanceRate={overallAccuracy}
+              coveragePercent={solvedCoveragePercent}
+              difficultyBreakdown={solvedDifficultyBreakdown}
+              topics={topicMasteryGraphData}
+            />
+          </div>
+        </ScrollReveal>
 
         {/* Charts */}
         {totalAnswered > 0 && (

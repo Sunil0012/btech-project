@@ -15,6 +15,7 @@ import {
 } from "@/lib/classroom";
 import { ensureTeacherProfileRecord, fetchTeacherWorkspace } from "@/lib/classroomData";
 import { logTeacherActivityEvent } from "@/lib/activityEvents";
+import { ensureCourseFilesBucket } from "@/lib/courseFiles";
 
 function getTeacherDisplayName(user: User) {
   const fullName = user.user_metadata?.full_name;
@@ -177,6 +178,9 @@ export function TeacherAuthProvider({ children }: { children: ReactNode }) {
       );
       setClassroomReady(true);
       setClassroomError(null);
+
+      // Ensure course files storage bucket exists
+      await ensureCourseFilesBucket();
 
       return "teacher" as const;
     } catch (error) {

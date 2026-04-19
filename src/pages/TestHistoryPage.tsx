@@ -24,8 +24,10 @@ import type { Json, StudentTables } from "@/integrations/supabase/student-types"
 import type { Question } from "@/data/questions";
 import {
   createEmptyAnswer,
-  getQuestionForReview,
+  getQuestionForPayloadReview,
   getReviewState,
+  parseTestReviewPayload,
+  summarizeTestWarnings,
   type PracticeAnswer,
   type QuestionSessionReviewPayload,
   type TestReviewPayload,
@@ -68,41 +70,6 @@ function getTypeTone(testType: string) {
   return "bg-accent/10 text-accent";
 }
 
-function parseReviewPayload(value: Json | null): TestReviewPayload | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-
-  const questionIds = Array.isArray(value.question_ids)
-    ? value.question_ids.filter((item): item is string => typeof item === "string")
-    : [];
-  const answers = Array.isArray(value.answers)
-    ? (value.answers as PracticeAnswer[])
-    : [];
-
-  if (questionIds.length === 0 || answers.length === 0) return null;
-
-  const questionReviews = Array.isArray(value.question_reviews)
-    ? value.question_reviews.filter(
-        (item): item is QuestionSessionReviewPayload =>
-          Boolean(item) &&
-          typeof item === "object" &&
-          !Array.isArray(item) &&
-          typeof item.questionId === "string" &&
-          typeof item.correct === "boolean" &&
-          typeof item.timeSpentSeconds === "number" &&
-          typeof item.rapidGuessWarning === "boolean" &&
-          typeof item.rapidGuessThresholdSeconds === "number" &&
-          typeof item.eloAdjustment === "number"
-      )
-    : [];
-
-  return {
-    full_test_id: typeof value.full_test_id === "string" ? value.full_test_id : null,
-    question_ids: questionIds,
-    answers,
-    question_reviews: questionReviews,
-  };
-}
-
 export default function TestHistoryPage() {
   const { user } = useStudentAuth();
   const [historyRows, setHistoryRows] = useState<StudentTables<"test_history">[]>([]);
@@ -123,7 +90,19 @@ export default function TestHistoryPage() {
       .select("*")
       .eq("user_id", user.id)
       .order("completed_at", { ascending: false })
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Error loading test history:", error);
+        }
+        console.log("Test history loaded from DB:", {
+          rowCount: data?.length ?? 0,
+          rows: data?.map((row) => ({
+            id: row.id,
+            testType: row.test_type,
+            hasReviewPayload: Boolean(row.review_payload),
+            reviewPayloadKeys: row.review_payload ? Object.keys(row.review_payload) : [],
+          })) ?? [],
+        });
         setHistoryRows(data || []);
       })
       .finally(() => setLoading(false));
@@ -244,10 +223,11 @@ export default function TestHistoryPage() {
                 const accuracy = row.total_questions > 0
                   ? Math.round((row.correct_answers / row.total_questions) * 100)
                   : 0;
-                const durationText = row.duration_seconds
+                const durationText = (row.duration_seconds && row.duration_seconds > 0)
                   ? `${Math.max(1, Math.round(row.duration_seconds / 60))} min`
                   : "Untimed";
-                const reviewPayload = parseReviewPayload(row.review_payload);
+                const reviewPayload = parseTestReviewPayload(row.review_payload);
+                const warningSummary = summarizeTestWarnings(reviewPayload, row.violations ?? 0);
 
                 return (
                   <ScrollReveal key={row.id} delay={Math.min(index * 30, 180)}>
@@ -285,8 +265,12 @@ export default function TestHistoryPage() {
                         </div>
                         <div className="rounded-xl border bg-muted/20 p-4">
                           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Warnings</p>
-                          <p className="mt-2 text-2xl font-bold text-foreground">{row.violations}</p>
-                          <p className="text-xs text-muted-foreground">focus-loss penalties</p>
+                          <p className="mt-2 text-2xl font-bold text-foreground">{warningSummary.total}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {warningSummary.rapidGuessWarnings > 0
+                              ? `${warningSummary.focusWarnings} focus + ${warningSummary.rapidGuessWarnings} rapid-guess`
+                              : "Saved with the attempt"}
+                          </p>
                         </div>
                         <div className="rounded-xl border bg-muted/20 p-4">
                           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Review answers</p>
@@ -295,15 +279,19 @@ export default function TestHistoryPage() {
                           </p>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {reviewPayload
-                              ? "Open the full answer-by-answer review for this attempt."
-                              : "Detailed review appears for attempts saved after this update."}
+                              ? `${reviewPayload.question_ids.length} saved questions`
+                              : "Only newer attempts with saved review data can open here."}
                           </p>
                           <Button
                             variant="outline"
                             size="sm"
                             className="mt-3 w-full"
                             disabled={!reviewPayload}
-                            onClick={() => reviewPayload && setSelectedReview({ row, payload: reviewPayload })}
+                            onClick={() => {
+                              if (reviewPayload) {
+                                setSelectedReview({ row, payload: reviewPayload });
+                              }
+                            }}
                           >
                             Review Answers
                           </Button>
@@ -383,7 +371,7 @@ function HistoryReviewPage({
 
     return payload.question_ids
       .map((questionId, index) => {
-        const question = getQuestionForReview(questionId);
+        const question = getQuestionForPayloadReview(payload, index);
         if (!question) return null;
 
         return {
