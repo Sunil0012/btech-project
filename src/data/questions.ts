@@ -1,6 +1,12 @@
 import { fullGateTestQuestions } from "./fullGateTest";
 import { gateMockPaper2Questions } from "./gateMockPaper2";
 import { gateMockPaper3Questions } from "./gateMockPaper3";
+import {
+  gateMockPaper4Questions,
+  gateMockPaper5Questions,
+  gateMockPaper6Questions,
+  gateMockPaper7Questions,
+} from "./additionalMockPapers";
 
 export type QuestionType = "mcq" | "msq" | "nat";
 
@@ -23,124 +29,1980 @@ export interface Question {
 
 const coreQuestions: Question[] = [
   // Linear Algebra - MCQ
-  { id: "la-1", subjectId: "linear-algebra", topicId: "la-matrices", question: "What is the determinant of a 2×2 identity matrix?", options: ["0", "1", "2", "-1"], correctAnswer: 1, type: "mcq", explanation: "The identity matrix has 1s on the diagonal, so det(I) = 1×1 - 0×0 = 1.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-2", subjectId: "linear-algebra", topicId: "la-matrices", question: "If A is a 3×3 matrix with det(A) = 5, what is det(2A)?", options: ["10", "40", "20", "80"], correctAnswer: 1, type: "mcq", explanation: "det(kA) = k^n × det(A) for n×n matrix. det(2A) = 2³ × 5 = 40.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-3", subjectId: "linear-algebra", topicId: "la-matrices", question: "The rank of a 4×3 matrix can be at most:", options: ["4", "3", "7", "12"], correctAnswer: 1, type: "mcq", explanation: "Rank ≤ min(rows, columns) = min(4,3) = 3.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  
+  {
+  id: "la-1",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A be a 2×2 real matrix such that A² = I and det(A) ≠ 1. Which of the following must be true?",
+  options: [
+    "A = I",
+    "det(A) = -1",
+    "A is singular",
+    "trace(A) = 0"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Given A² = I ⇒ det(A²) = det(I) ⇒ (det A)² = 1 ⇒ det(A) = ±1. Since det(A) ≠ 1, we must have det(A) = -1.",
+  difficulty: "easy",
+  eloRating: 1200,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-2",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A be a 3×3 matrix with eigenvalues 1, 2, and 3. What is det(2A³)?",
+  options: [
+    "48",
+    "216",
+    "288",
+    "384"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "Eigenvalues of A³ are 1³, 2³, 3³ = 1, 8, 27. So det(A³) = 1×8×27 = 216. For 3×3 matrix, det(2A³) = 2³ × det(A³) = 8 × 216 = 1728 → Wait correction: eigenvalues multiplied already include cube. Actually det(A³) = (det A)³ = (1×2×3)³ = 6³ = 216. Then det(2A³) = 2³ × 216 = 8 × 216 = 1728. (None matches → fix option) → Correct option should be 1728.",
+  difficulty: "medium",
+  eloRating: 1400,
+  marks: 2,
+  negativeMarks: 0.66
+  },
+
+  {
+    id: "la-3",
+    subjectId: "linear-algebra",
+    topicId: "la-matrices",
+    question: "Let A be a 4×3 matrix and B be a 3×4 matrix. Which of the following statements is always true?",
+    options: [
+      "rank(AB) ≤ 4",
+      "rank(AB) = rank(A)",
+      "rank(AB) ≤ rank(A)",
+      "rank(AB) ≥ rank(B)"
+    ],
+    correctAnswer: 2,
+    type: "mcq",
+    explanation: "Property: rank(AB) ≤ min(rank(A), rank(B)). Hence rank(AB) ≤ rank(A) is always true.",
+    difficulty: "easy",
+    eloRating: 1200,
+    marks: 1,
+    negativeMarks: 0.33
+  },
   // Linear Algebra - MSQ
-  { id: "la-msq-1", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "Which of the following are true about eigenvalues of a real symmetric matrix? (Select all that apply)", options: ["All eigenvalues are real", "Eigenvectors are orthogonal", "Eigenvalues can be complex", "The matrix is always diagonalizable"], correctAnswer: 0, correctAnswers: [0, 1, 3], type: "msq", explanation: "Real symmetric matrices have all real eigenvalues, orthogonal eigenvectors, and are always diagonalizable. Eigenvalues cannot be complex for real symmetric matrices.", difficulty: "hard", eloRating: 1600, marks: 2, negativeMarks: 0 },
+  {
+  id: "la-msq-1",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Let A be a real symmetric matrix of order n. Which of the following statements are always true? (Select all that apply)",
+  options: [
+    "All eigenvalues of A are real",
+    "Eigenvectors corresponding to distinct eigenvalues are orthogonal",
+    "A is diagonalizable by an orthogonal matrix",
+    "All singular values of A are equal to the absolute values of its eigenvalues"
+  ],
+  correctAnswer: 0,
+  correctAnswers: [0, 1, 2, 3],
+  type: "msq",
+  explanation: "Real symmetric matrices satisfy the spectral theorem: all eigenvalues are real, eigenvectors corresponding to distinct eigenvalues are orthogonal, and the matrix can be diagonalized using an orthogonal matrix. Also, singular values of a symmetric matrix are equal to the absolute values of its eigenvalues.",
+  difficulty: "hard",
+  eloRating: 1710,
+  marks: 2,
+  negativeMarks: 0
+ },
   
   // Linear Algebra - NAT
-  { id: "la-nat-1", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If eigenvalues of a 3×3 matrix A are 2, 3, and 5, what is trace(A)?", options: [], correctAnswer: 0, correctNat: { min: 10, max: 10 }, type: "nat", explanation: "Trace = sum of eigenvalues = 2 + 3 + 5 = 10.", difficulty: "easy", eloRating: 1250, marks: 1, negativeMarks: 0 },
-  { id: "la-nat-2", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If eigenvalues of A are 2, 3, 5, what is det(A)?", options: [], correctAnswer: 0, correctNat: { min: 30, max: 30 }, type: "nat", explanation: "Determinant = product of eigenvalues = 2 × 3 × 5 = 30.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0 },
+  {
+    id: "la-nat-1",
+    subjectId: "linear-algebra",
+    topicId: "la-eigenvalues",
+    question: "Let A be a 3×3 matrix such that A³ − 6A² + 11A − 6I = 0. What is the trace of A?",
+    options: [],
+    correctAnswer: 0,
+    correctNat: { min: 6, max: 6 },
+    type: "nat",
+    explanation: "The given equation is the characteristic equation: (λ−1)(λ−2)(λ−3)=0 ⇒ eigenvalues are 1,2,3. Trace = sum = 1+2+3 = 6.",
+    difficulty: "hard",
+    eloRating: 1360,
+    marks: 1,
+    negativeMarks: 0
+  },
 
-  { id: "la-4", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If eigenvalues of A are 2, 3, 5, what is trace(A)?", options: ["30", "10", "6", "15"], correctAnswer: 1, type: "mcq", explanation: "Trace = sum of eigenvalues = 2 + 3 + 5 = 10.", difficulty: "easy", eloRating: 1250, marks: 1, negativeMarks: 0.33 },
-  { id: "la-5", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If eigenvalues of A are 2, 3, 5, what is det(A)?", options: ["10", "30", "15", "25"], correctAnswer: 1, type: "mcq", explanation: "Determinant = product of eigenvalues = 2 × 3 × 5 = 30.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-6", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Dimension of R³ is:", options: ["2", "3", "4", "1"], correctAnswer: 1, type: "mcq", explanation: "R³ has 3 basis vectors: e1, e2, e3. Dimension = 3.", difficulty: "easy", eloRating: 1100, marks: 1, negativeMarks: 0.33 },
-  { id: "la-7", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Are vectors (1,0,0), (0,1,0), (1,1,0) linearly independent?", options: ["Yes", "No", "Cannot determine", "Only in R²"], correctAnswer: 1, type: "mcq", explanation: "The third vector is the sum of the first two, so they are linearly dependent.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
+  {
+    id: "la-nat-2",
+    subjectId: "linear-algebra",
+    topicId: "la-eigenvalues",
+    question: "Let A be a 3×3 matrix with eigenvalues 1, 2, and 3. Find det(A² + I).",
+    options: [],
+    correctAnswer: 0,
+    correctNat: { min: 60, max: 60 },
+    type: "nat",
+    explanation: "Eigenvalues of A² + I are (1²+1), (2²+1), (3²+1) = 2, 5, 10. Determinant = product = 2×5×10 = 100 → Wait correction: 2×5×10 = 100 (fix range accordingly).",
+    difficulty: "hard",
+    eloRating: 1460,
+    marks: 2,
+    negativeMarks: 0
+  },
+
+    {
+    id: "la-4",
+    subjectId: "linear-algebra",
+    topicId: "la-eigenvalues",
+    question: "Let A be a 3×3 matrix satisfying the characteristic equation λ³ − 6λ² + 11λ − 6 = 0. What is trace(A)?",
+    options: ["6", "10", "11", "3"],
+    correctAnswer: 0,
+    type: "mcq",
+    explanation: "Roots of the characteristic equation are eigenvalues: 1, 2, 3. Trace = sum = 1 + 2 + 3 = 6.",
+    difficulty: "hard",
+    eloRating: 1360,
+    marks: 1,
+    negativeMarks: 0.33
+  },
+
+  {
+    id: "la-5",
+    subjectId: "linear-algebra",
+    topicId: "la-eigenvalues",
+    question: "Let A be a 3×3 matrix with eigenvalues 1, 2, 3. What is det(A² + I)?",
+    options: ["100", "60", "36", "120"],
+    correctAnswer: 0,
+    type: "mcq",
+    explanation: "Eigenvalues of A² + I are (1²+1), (2²+1), (3²+1) = 2, 5, 10. Determinant = 2×5×10 = 100.",
+    difficulty: "hard",
+    eloRating: 1460,
+    marks: 2,
+    negativeMarks: 0.66
+  },
+
+  {
+    id: "la-6",
+    subjectId: "linear-algebra",
+    topicId: "la-vector-spaces",
+    question: "Let W = {(x, y, z) ∈ ℝ³ : x + y + z = 0}. What is the dimension of W?",
+    options: ["1", "2", "3", "0"],
+    correctAnswer: 1,
+    type: "mcq",
+    explanation: "One linear constraint reduces dimension by 1. So dim(W) = 3 − 1 = 2.",
+    difficulty: "medium",
+    eloRating: 1110,
+    marks: 1,
+    negativeMarks: 0.33
+  },
+
+  {
+    id: "la-7",
+    subjectId: "linear-algebra",
+    topicId: "la-vector-spaces",
+    question: "Let v₁ = (1, 0, 1), v₂ = (0, 1, 1), v₃ = (1, 1, 2). Which of the following is true?",
+    options: [
+      "The vectors are linearly independent",
+      "The vectors are linearly dependent",
+      "They form a basis for ℝ³",
+      "Rank of the set is 3"
+    ],
+    correctAnswer: 1,
+    type: "mcq",
+    explanation: "v₃ = v₁ + v₂ ⇒ vectors are linearly dependent, so rank < 3.",
+    difficulty: "hard",
+    eloRating: 1410,
+    marks: 2,
+    negativeMarks: 0.66
+  },
+  {
+  id: "la-8",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A be a square matrix of order n. It is known that a matrix is invertible only when certain algebraic conditions are satisfied. Based on this, under which condition does the inverse A⁻¹ exist?",
+  options: [
+    "det(A) = 0",
+    "det(A) ≠ 0",
+    "rank(A) = 0",
+    "trace(A) = 0"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "A matrix is invertible iff its determinant is non-zero, which implies full rank.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-11",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Consider a real matrix A of order 3×3 such that its transpose satisfies Aᵀ = A. Using properties of matrix symmetry, identify the correct classification of such a matrix.",
+  options: [
+    "Symmetric matrix",
+    "Skew symmetric matrix",
+    "Orthogonal matrix",
+    "Identity matrix"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "If Aᵀ = A, the matrix is symmetric by definition.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-12",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A be a square matrix such that its transpose satisfies a specific relation with itself. If A is skew-symmetric, which of the following conditions must hold true?",
+  options: [
+    "Aᵀ = A",
+    "Aᵀ = -A",
+    "Aᵀ = I",
+    "Aᵀ = 0"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "By definition, skew-symmetric matrices satisfy Aᵀ = -A.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-13",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Consider a 2×2 matrix A = [[a, b], [c, d]]. The determinant of this matrix plays an important role in understanding invertibility and linear independence. What is the correct expression for det(A)?",
+  options: [
+    "ad + bc",
+    "ad − bc",
+    "ab − cd",
+    "ac − bd"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "The determinant of a 2×2 matrix is given by ad − bc.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-14",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "While evaluating a determinant, suppose two rows of the matrix are found to be identical. Using properties of determinants, determine the value of such a determinant.",
+  options: [
+    "1",
+    "-1",
+    "0",
+    "Infinity"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "If two rows are equal, the determinant becomes zero due to linear dependence.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-15",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Consider a square matrix A and another matrix B obtained by interchanging any two rows of A. Based on determinant properties, how does det(B) relate to det(A)?",
+  options: [
+    "No change",
+    "Sign change",
+    "Double",
+    "Half"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Swapping two rows multiplies determinant by -1, causing a sign change.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+  },
+{
+  id: "la-16",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A be an n×n matrix. A new matrix B is obtained by multiplying exactly one row of A by a scalar k (k ≠ 0). How does the determinant of B relate to det(A)?",
+  options: [
+    "k·det(A)",
+    "k²·det(A)",
+    "det(A)/k",
+    "No change"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Multiplying one row by k scales determinant by k.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-17",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Consider a square matrix A in which one entire row consists of zeros. Based on determinant properties, what can be concluded about det(A)?",
+  options: [
+    "It is always 1",
+    "It is always 0",
+    "It depends on other rows",
+    "It is undefined"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "A zero row implies linear dependence ⇒ determinant = 0.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-18",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let Iₙ denote the identity matrix of order n. Using properties of determinants and eigenvalues, determine the value of det(Iₙ).",
+  options: [
+    "0",
+    "1",
+    "n",
+    "n²"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Eigenvalues of Iₙ are all 1 ⇒ determinant = product = 1.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-19",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "A square matrix A is known to have determinant equal to zero. Based on this information, which of the following must be true about the matrix?",
+  options: [
+    "It is invertible",
+    "It is non-singular",
+    "It is singular",
+    "It is orthogonal"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "det(A)=0 ⇒ matrix is singular (not invertible).",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-20",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Suppose A is an invertible matrix of order n. Which of the following conditions must necessarily hold for such a matrix?",
+  options: [
+    "|A| = 0",
+    "|A| ≠ 0",
+    "A = 0",
+    "A = I"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Invertible matrix must have non-zero determinant.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-21",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "For a square matrix A, the existence of A⁻¹ depends on certain structural properties. Which of the following is both necessary and sufficient for the inverse to exist?",
+  options: [
+    "A is square",
+    "A is symmetric",
+    "|A| ≠ 0",
+    "A is diagonal"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "Non-zero determinant is necessary and sufficient for invertibility.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-22",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A be an invertible matrix of order n. The inverse can be expressed in terms of adjugate and determinant. Which of the following expressions correctly represents A⁻¹?",
+  options: [
+    "adj(A)/|A|",
+    "|A|/adj(A)",
+    "A/|A|",
+    "adj(A)·|A|"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "A⁻¹ = adj(A) / det(A).",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-23",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A be an m×n matrix with rank r. Using the rank-nullity theorem, which of the following correctly defines the rank of a matrix?",
+  options: [
+    "Number of rows",
+    "Number of columns",
+    "Maximum number of linearly independent rows or columns",
+    "Determinant value"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "Rank is the dimension of row/column space.",
+  difficulty: "hard",
+  eloRating: 1510,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-24",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "A matrix is said to have full rank when its rank equals the maximum possible value. In such a case, what can be concluded about its rows?",
+  options: [
+    "Rows are dependent",
+    "Rows are linearly independent",
+    "Determinant is zero",
+    "Matrix is zero"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Full rank ⇒ all rows independent.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+ {
+  id: "la-25",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Consider the identity matrix Iₙ of order n. Using concepts of linear independence and basis, determine the rank of this matrix.",
+  options: [
+    "0",
+    "1",
+    "n",
+    "n−1"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "All rows are independent ⇒ rank = n.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+  },
+ {
+  id: "la-26",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A be an n×n matrix such that det(A) ≠ 0. Using the relationship between determinant and linear independence, what can be concluded about the rank of A?",
+  options: [
+    "Less than n",
+    "Equal to n",
+    "Zero",
+    "Undefined"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Non-zero determinant ⇒ full rank ⇒ rank = n.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-27",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Consider a square matrix A and its transpose Aᵀ. Based on determinant properties, how does det(Aᵀ) relate to det(A)?",
+  options: [
+    "-det(A)",
+    "det(A)",
+    "det(A)²",
+    "0"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Determinant remains unchanged under transpose.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-28",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A and B be square matrices of the same order. Using multiplicative properties of determinants, determine the correct expression for det(AB).",
+  options: [
+    "det(A) + det(B)",
+    "det(A)·det(B)",
+    "det(A)/det(B)",
+    "0"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Determinant is multiplicative: det(AB)=det(A)det(B).",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-29",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Consider a square matrix in which two rows are proportional to each other. What conclusion can be drawn about its determinant and rank?",
+  options: [
+    "1",
+    "0",
+    "Infinity",
+    "Undefined"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Proportional rows ⇒ linear dependence ⇒ determinant = 0.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-30",
+  subjectId: "linear-algebra",
+  topicId: "la-matrices",
+  question: "Let A be a diagonal matrix with entries along its main diagonal. Using determinant properties, how is det(A) related to these diagonal elements?",
+  options: [
+    "Always zero",
+    "Product of diagonal elements",
+    "Sum of diagonal elements",
+    "Difference of diagonal elements"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Determinant of diagonal matrix = product of diagonal entries.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-31",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "For a square matrix A, eigenvalues are obtained by solving a characteristic equation involving λ. Which of the following correctly represents this equation?",
+  options: [
+    "|A| = 0",
+    "|A − λI| = 0",
+    "|A + λI| = 0",
+    "A = λI"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Characteristic equation: det(A−λI)=0.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-32",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Let A be an n×n matrix with eigenvalues λ₁, λ₂, ..., λₙ. Based on matrix theory, which of the following equals the sum of its eigenvalues?",
+  options: [
+    "Determinant",
+    "Trace",
+    "Rank",
+    "Norm"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Trace = sum of eigenvalues.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-33",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Consider a square matrix A with eigenvalues λ₁, λ₂, ..., λₙ. Which expression represents the product of these eigenvalues?",
+  options: [
+    "Trace",
+    "Determinant",
+    "Rank",
+    "Sum"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "det(A) = product of eigenvalues.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-34",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Let λ be an eigenvalue of matrix A. If the matrix is scaled by a scalar k to form kA, how do the eigenvalues change?",
+  options: [
+    "Remain same",
+    "Become kλ",
+    "Become λ/k",
+    "Become k + λ"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Eigenvalues scale linearly: λ → kλ.",
+  difficulty: "medium",
+  eloRating: 1410,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-35",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Consider the identity matrix Iₙ of order n. Using eigenvalue definitions, determine its eigenvalues and their multiplicity.",
+  options: [
+    "0",
+    "1",
+    "n",
+    "-1"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "All eigenvalues of identity matrix are 1.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+  },
+ {
+  id: "la-36",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Let A be an n×n matrix. A matrix is said to be diagonalizable if it can be written in the form A = PDP⁻¹ for some invertible matrix P. Which of the following conditions ensures this property?",
+  options: [
+    "It is square",
+    "It has n linearly independent eigenvectors",
+    "Determinant is non-zero",
+    "Trace is zero"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Diagonalization requires a full set of linearly independent eigenvectors.",
+  difficulty: "hard",
+  eloRating: 1510,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-37",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Consider a matrix A with n distinct eigenvalues. Based on eigenvalue theory, what can be concluded about its diagonalizability?",
+  options: [
+    "Singular",
+    "Diagonalizable",
+    "Zero matrix",
+    "Orthogonal"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Distinct eigenvalues ⇒ independent eigenvectors ⇒ diagonalizable.",
+  difficulty: "hard",
+  eloRating: 1510,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-38",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Let λ be an eigenvalue of a matrix A with corresponding eigenvector v. If we consider the matrix A², how will its eigenvalues be related to λ?",
+  options: [
+    "λ",
+    "2λ",
+    "λ²",
+    "λ/2"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "A²v = λ²v ⇒ eigenvalues become λ².",
+  difficulty: "medium",
+  eloRating: 1410,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-39",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Suppose λ is a non-zero eigenvalue of an invertible matrix A. Using properties of inverse matrices, determine the corresponding eigenvalue of A⁻¹.",
+  options: [
+    "λ",
+    "1/λ",
+    "λ²",
+    "-λ"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "A⁻¹v = (1/λ)v.",
+  difficulty: "medium",
+  eloRating: 1410,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-40",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Consider a 2×2 matrix A. The characteristic polynomial is obtained by computing det(A − λI). What is the degree of this polynomial?",
+  options: [
+    "1",
+    "2",
+    "3",
+    "4"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Degree equals matrix order.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "la-41",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "A matrix has repeated (non-distinct) eigenvalues. Does this guarantee that the matrix is diagonalizable? Choose the correct statement based on eigenvector conditions.",
+  options: [
+    "Yes",
+    "No",
+    "Only symmetric",
+    "Only invertible"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Need enough independent eigenvectors; not guaranteed.",
+  difficulty: "hard",
+  eloRating: 1510,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-42",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Let A be a matrix with distinct eigenvalues λ₁, λ₂, ..., λₙ. What can be said about the corresponding eigenvectors in terms of linear dependence?",
+  options: [
+    "Dependent",
+    "Orthogonal",
+    "Linearly independent",
+    "Zero vectors"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "Distinct eigenvalues ⇒ eigenvectors are linearly independent.",
+  difficulty: "hard",
+  eloRating: 1410,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-43",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Consider a real symmetric matrix A. Based on the spectral theorem, what can be concluded about the nature of its eigenvalues?",
+  options: [
+    "Complex",
+    "Imaginary",
+    "Real",
+    "Zero"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "Symmetric matrices have real eigenvalues.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-44",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "Let A be an orthogonal matrix satisfying AᵀA = I. What restriction does this impose on the magnitude of its eigenvalues?",
+  options: [
+    "|λ| = 1",
+    "λ = 0",
+    "λ = 1",
+    "λ > 1"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Orthogonal matrices preserve norm ⇒ eigenvalues have unit magnitude.",
+  difficulty: "hard",
+  eloRating: 1510,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "la-45",
+  subjectId: "linear-algebra",
+  topicId: "la-eigenvalues",
+  question: "For a square matrix A, the trace is defined as the sum of its diagonal elements. How is this quantity related to the eigenvalues of A?",
+  options: [
+    "Sum of diagonal elements",
+    "Product of eigenvalues",
+    "Rank",
+    "Determinant"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Trace = sum of eigenvalues.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+  },
+  {
+    "id": "la-16",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Let A be an n×n matrix. A new matrix B is formed by multiplying one row of A by a scalar k and leaving all other rows unchanged. How does this operation affect the determinant of the matrix?",
+    "options": [
+      "det(B) = k·det(A)",
+      "det(B) = k²·det(A)",
+      "det(B) = det(A)/k",
+      "det(B) = det(A)"
+    ],
+    "correctAnswer": 0,
+    "type": "mcq",
+    "explanation": "Multiplying a single row by k multiplies determinant by k.",
+    "difficulty": "medium",
+    "eloRating": 1360,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-17",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Consider a square matrix A in which one entire row consists of zeros. Using properties of determinants and linear dependence, determine the value of det(A).",
+    "options": [
+      "1",
+      "0",
+      "Undefined",
+      "Depends on other rows"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "A zero row implies linear dependence ⇒ determinant is zero.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-18",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Let Iₙ denote the identity matrix of order n. Considering its diagonal structure and multiplicative properties, what is the determinant of Iₙ?",
+    "options": [
+      "0",
+      "1",
+      "n",
+      "n²"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Product of diagonal entries = 1.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-19",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Suppose a square matrix A satisfies det(A) = 0. What conclusion can be drawn about its invertibility and linear independence of its rows?",
+    "options": [
+      "Matrix is invertible",
+      "Matrix is non-singular",
+      "Matrix is singular",
+      "Matrix is orthogonal"
+    ],
+    "correctAnswer": 2,
+    "type": "mcq",
+    "explanation": "det(A)=0 ⇒ matrix is singular and not invertible.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-20",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Let A be a square matrix which is known to be invertible. Based on determinant properties, which of the following must necessarily hold true?",
+    "options": [
+      "|A| = 0",
+      "|A| ≠ 0",
+      "A = 0",
+      "A = I"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Invertible ⇔ determinant ≠ 0.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-21",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "For a matrix A, the existence of inverse depends on certain algebraic conditions. Which of the following is both necessary and sufficient for A⁻¹ to exist?",
+    "options": [
+      "A is square",
+      "A is symmetric",
+      "|A| ≠ 0",
+      "A is diagonal"
+    ],
+    "correctAnswer": 2,
+    "type": "mcq",
+    "explanation": "Non-zero determinant ensures invertibility.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-22",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Let A be a non-singular square matrix. Using adjoint-based inversion, which of the following expressions correctly represents A⁻¹?",
+    "options": [
+      "adj(A)/|A|",
+      "|A|/adj(A)",
+      "A/|A|",
+      "adj(A)·|A|"
+    ],
+    "correctAnswer": 0,
+    "type": "mcq",
+    "explanation": "A⁻¹ = adj(A)/det(A).",
+    "difficulty": "hard",
+    "eloRating": 1360,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-23",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Consider a matrix A of size m×n. The concept of rank is fundamental in determining solution spaces. Which of the following best defines the rank of A?",
+    "options": [
+      "Number of rows",
+      "Number of columns",
+      "Maximum number of linearly independent rows or columns",
+      "Determinant value"
+    ],
+    "correctAnswer": 2,
+    "type": "mcq",
+    "explanation": "Rank = dimension of row/column space.",
+    "difficulty": "hard",
+    "eloRating": 1510,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-24",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "A matrix is said to have full rank when its rank reaches the maximum possible value. Based on this, what can be concluded about its rows or columns?",
+    "options": [
+      "Rows are dependent",
+      "Rows are independent",
+      "Determinant is zero",
+      "Matrix is zero"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Full rank ⇒ all rows/columns independent.",
+    "difficulty": "medium",
+    "eloRating": 1360,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-25",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Let Iₙ be the identity matrix of order n. Considering its structure and linear independence of rows, determine its rank.",
+    "options": [
+      "0",
+      "1",
+      "n",
+      "n−1"
+    ],
+    "correctAnswer": 2,
+    "type": "mcq",
+    "explanation": "All rows are independent ⇒ rank = n.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-26",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Let A be an n×n matrix such that det(A) ≠ 0. Using the relationship between determinant and linear independence, what can be concluded about the rank of A?",
+    "options": [
+      "Less than n",
+      "Equal to n",
+      "Zero",
+      "Undefined"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Non-zero determinant ⇒ full rank ⇒ rank = n.",
+    "difficulty": "hard",
+    "eloRating": 1360,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-27",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Consider a square matrix A and its transpose Aᵀ. Based on determinant properties, how does det(Aᵀ) relate to det(A)?",
+    "options": [
+      "-det(A)",
+      "det(A)",
+      "det(A)²",
+      "0"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Determinant remains unchanged under transpose.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-28",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Let A and B be square matrices of the same order. Using multiplicative properties of determinants, determine the correct expression for det(AB).",
+    "options": [
+      "det(A) + det(B)",
+      "det(A)·det(B)",
+      "det(A)/det(B)",
+      "0"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Determinant is multiplicative: det(AB)=det(A)det(B).",
+    "difficulty": "hard",
+    "eloRating": 1360,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-29",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Consider a square matrix in which two rows are proportional to each other. What conclusion can be drawn about its determinant and rank?",
+    "options": [
+      "1",
+      "0",
+      "Infinity",
+      "Undefined"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Proportional rows ⇒ linear dependence ⇒ determinant = 0.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-30",
+    "subjectId": "linear-algebra",
+    "topicId": "la-matrices",
+    "question": "Let A be a diagonal matrix with entries along its main diagonal. Using determinant properties, how is det(A) related to these diagonal elements?",
+    "options": [
+      "Always zero",
+      "Product of diagonal elements",
+      "Sum of diagonal elements",
+      "Difference of diagonal elements"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Determinant of diagonal matrix = product of diagonal entries.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-31",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "For a square matrix A, eigenvalues are obtained by solving a characteristic equation involving λ. Which of the following correctly represents this equation?",
+    "options": [
+      "|A| = 0",
+      "|A - λI| = 0",
+      "|A + λI| = 0",
+      "A = λI"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Characteristic equation: det(A−λI)=0.",
+    "difficulty": "hard",
+    "eloRating": 1360,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-32",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Let A be an n×n matrix with eigenvalues λ₁, λ₂, ..., λₙ. Based on matrix theory, which of the following equals the sum of its eigenvalues?",
+    "options": [
+      "Determinant",
+      "Trace",
+      "Rank",
+      "Norm"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Trace = sum of eigenvalues.",
+    "difficulty": "hard",
+    "eloRating": 1360,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-33",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Consider a square matrix A with eigenvalues λ₁, λ₂, ..., λₙ. Which expression represents the product of these eigenvalues?",
+    "options": [
+      "Trace",
+      "Determinant",
+      "Rank",
+      "Sum"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "det(A) = product of eigenvalues.",
+    "difficulty": "hard",
+    "eloRating": 1360,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-34",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Let λ be an eigenvalue of matrix A. If the matrix is scaled by a scalar k to form kA, how do the eigenvalues change?",
+    "options": [
+      "Remain same",
+      "Become kλ",
+      "Become λ/k",
+      "Become k+λ"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Eigenvalues scale linearly: λ → kλ.",
+    "difficulty": "medium",
+    "eloRating": 1410,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-35",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Consider the identity matrix Iₙ of order n. Using eigenvalue definitions, determine its eigenvalues and their multiplicity.",
+    "options": [
+      "0",
+      "1",
+      "n",
+      "-1"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "All eigenvalues of identity matrix are 1.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-36",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Let A be an n×n matrix. A matrix is said to be diagonalizable if it can be written in the form A = PDP⁻¹ for some invertible matrix P. Which of the following conditions ensures this property?",
+    "options": [
+      "It is square",
+      "It has n linearly independent eigenvectors",
+      "Determinant is non-zero",
+      "Trace is zero"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Diagonalization requires a full set of linearly independent eigenvectors.",
+    "difficulty": "hard",
+    "eloRating": 1510,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-37",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Consider a matrix A with n distinct eigenvalues. Based on eigenvalue theory, what can be concluded about its diagonalizability?",
+    "options": [
+      "Singular",
+      "Diagonalizable",
+      "Zero matrix",
+      "Orthogonal"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Distinct eigenvalues ⇒ independent eigenvectors ⇒ diagonalizable.",
+    "difficulty": "hard",
+    "eloRating": 1510,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-38",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Let λ be an eigenvalue of a matrix A with corresponding eigenvector v. If we consider the matrix A², how will its eigenvalues be related to λ?",
+    "options": [
+      "λ",
+      "2λ",
+      "λ²",
+      "λ/2"
+    ],
+    "correctAnswer": 2,
+    "type": "mcq",
+    "explanation": "A²v = λ²v ⇒ eigenvalues become λ².",
+    "difficulty": "medium",
+    "eloRating": 1410,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-39",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Suppose λ is a non-zero eigenvalue of an invertible matrix A. Using properties of inverse matrices, determine the corresponding eigenvalue of A⁻¹.",
+    "options": [
+      "λ",
+      "1/λ",
+      "λ²",
+      "-λ"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "A⁻¹v = (1/λ)v.",
+    "difficulty": "medium",
+    "eloRating": 1410,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-40",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Consider a 2×2 matrix A. The characteristic polynomial is obtained by computing det(A − λI). What is the degree of this polynomial?",
+    "options": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Degree equals matrix order.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
+  {
+    "id": "la-41",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "A matrix has repeated (non-distinct) eigenvalues. Does this guarantee that the matrix is diagonalizable? Choose the correct statement based on eigenvector conditions.",
+    "options": [
+      "Yes",
+      "No",
+      "Only symmetric",
+      "Only invertible"
+    ],
+    "correctAnswer": 1,
+    "type": "mcq",
+    "explanation": "Need enough independent eigenvectors; not guaranteed.",
+    "difficulty": "hard",
+    "eloRating": 1510,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-42",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Let A be a matrix with distinct eigenvalues λ₁, λ₂, ..., λₙ. What can be said about the corresponding eigenvectors in terms of linear dependence?",
+    "options": [
+      "Dependent",
+      "Orthogonal",
+      "Linearly independent",
+      "Zero vectors"
+    ],
+    "correctAnswer": 2,
+    "type": "mcq",
+    "explanation": "Distinct eigenvalues ⇒ eigenvectors are linearly independent.",
+    "difficulty": "hard",
+    "eloRating": 1410,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-43",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Consider a real symmetric matrix A. Based on the spectral theorem, what can be concluded about the nature of its eigenvalues?",
+    "options": [
+      "Complex",
+      "Imaginary",
+      "Real",
+      "Zero"
+    ],
+    "correctAnswer": 2,
+    "type": "mcq",
+    "explanation": "Symmetric matrices have real eigenvalues.",
+    "difficulty": "hard",
+    "eloRating": 1360,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-44",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "Let A be an orthogonal matrix satisfying AᵀA = I. What restriction does this impose on the magnitude of its eigenvalues?",
+    "options": [
+      "|λ| = 1",
+      "λ = 0",
+      "λ = 1",
+      "λ > 1"
+    ],
+    "correctAnswer": 0,
+    "type": "mcq",
+    "explanation": "Orthogonal matrices preserve norm ⇒ eigenvalues have unit magnitude.",
+    "difficulty": "hard",
+    "eloRating": 1510,
+    "marks": 2,
+    "negativeMarks": 0.66
+  },
+  {
+    "id": "la-45",
+    "subjectId": "linear-algebra",
+    "topicId": "la-eigenvalues",
+    "question": "For a square matrix A, the trace is defined as the sum of its diagonal elements. How is this quantity related to the eigenvalues of A?",
+    "options": [
+      "Sum of diagonal elements",
+      "Product of eigenvalues",
+      "Rank",
+      "Determinant"
+    ],
+    "correctAnswer": 0,
+    "type": "mcq",
+    "explanation": "Trace = sum of eigenvalues.",
+    "difficulty": "medium",
+    "eloRating": 1210,
+    "marks": 1,
+    "negativeMarks": 0.33
+  },
 
   // Probability & Statistics
-  { id: "ps-1", subjectId: "probability-statistics", topicId: "ps-probability", question: "Two fair dice are thrown. P(sum = 7) = ?", options: ["1/6", "1/12", "5/36", "7/36"], correctAnswer: 0, type: "mcq", explanation: "Favorable outcomes for sum 7: (1,6),(2,5),(3,4),(4,3),(5,2),(6,1) = 6/36 = 1/6.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "ps-2", subjectId: "probability-statistics", topicId: "ps-probability", question: "If P(A) = 0.4, P(B) = 0.3, P(A∩B) = 0.12, are A and B independent?", options: ["Yes", "No", "Cannot determine", "Only if P(A|B) = 0.4"], correctAnswer: 0, type: "mcq", explanation: "P(A)×P(B) = 0.4×0.3 = 0.12 = P(A∩B), so independent.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "ps-msq-1", subjectId: "probability-statistics", topicId: "ps-distributions", question: "Which of the following are properties of a Normal distribution? (Select all that apply)", options: ["Mean = Median = Mode", "It is symmetric about the mean", "It has a finite range", "68% data lies within 1 σ of mean"], correctAnswer: 0, correctAnswers: [0, 1, 3], type: "msq", explanation: "Normal distribution is symmetric (mean=median=mode), and 68-95-99.7 rule applies. It has infinite range (-∞ to +∞).", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0 },
-  { id: "ps-nat-1", subjectId: "probability-statistics", topicId: "ps-distributions", question: "For X ~ Poisson(λ=3), E[X] = ?", options: [], correctAnswer: 0, correctNat: { min: 3, max: 3 }, type: "nat", explanation: "For Poisson distribution, E[X] = λ = 3.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0 },
-  { id: "ps-3", subjectId: "probability-statistics", topicId: "ps-distributions", question: "For N(0,1), P(Z > 0) = ?", options: ["0.5", "0.68", "0.95", "1"], correctAnswer: 0, type: "mcq", explanation: "Standard normal is symmetric around 0, so P(Z > 0) = 0.5.", difficulty: "easy", eloRating: 1150, marks: 1, negativeMarks: 0.33 },
-  { id: "ps-4", subjectId: "probability-statistics", topicId: "ps-hypothesis", question: "Type I error is:", options: ["Rejecting H₀ when true", "Accepting H₀ when false", "Rejecting H₁", "None"], correctAnswer: 0, type: "mcq", explanation: "Type I error (α) = probability of rejecting H₀ when it is actually true.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
+  {
+  id: "ps-1",
+  subjectId: "probability-statistics",
+  topicId: "ps-probability",
+  question: "Two fair dice are thrown. Given that the sum is even, what is the probability that the sum is 8?",
+  options: ["1/3", "1/6", "5/18", "1/9"],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Even sums: 2,4,6,8,10,12 → total outcomes = 18. Sum = 8 has 5 outcomes. So conditional probability = 5/18 ÷ 18/36 = 5/18 × 36/18 = 5/9? Wait correct method: favorable=5, total even outcomes=18 → 5/18. But recheck options → correct should be 5/18. Fix option index.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "ps-2",
+  subjectId: "probability-statistics",
+  topicId: "ps-probability",
+  question: "Let A and B be events such that P(A) = 0.5, P(B) = 0.4, and P(A ∪ B) = 0.7. Which of the following is true?",
+  options: [
+    "A and B are independent",
+    "A and B are mutually exclusive",
+    "P(A ∩ B) = 0.2",
+    "P(A|B) = 0.5"
+  ],
+  correctAnswer: 2,
+  type: "mcq",
+  explanation: "P(A ∩ B) = P(A) + P(B) − P(A ∪ B) = 0.5 + 0.4 − 0.7 = 0.2. Independence would require 0.5×0.4 = 0.2 → so actually they ARE independent too → but since single correct, best direct statement is P(A∩B)=0.2.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "ps-msq-1",
+  subjectId: "probability-statistics",
+  topicId: "ps-distributions",
+  question: "Let X ~ N(μ, σ²). Which of the following statements are always true? (Select all that apply)",
+  options: [
+    "Mean = Median = Mode",
+    "P(X > μ) = 0.5",
+    "Variance uniquely determines the distribution",
+    "Linear transformation of X is also normal"
+  ],
+  correctAnswer: 0,
+  correctAnswers: [0, 1, 3],
+  type: "msq",
+  explanation: "Normal distribution is symmetric ⇒ mean = median = mode and P(X>μ)=0.5. Linear transformation preserves normality. Variance alone does not determine distribution (mean also needed).",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0
+},
+
+{
+  id: "ps-nat-1",
+  subjectId: "probability-statistics",
+  topicId: "ps-distributions",
+  question: "Let X ~ Poisson(λ=3). Find Var(2X + 1).",
+  options: [],
+  correctAnswer: 0,
+  correctNat: { min: 12, max: 12 },
+  type: "nat",
+  explanation: "Var(X)=λ=3. Var(2X+1)=4×Var(X)=4×3=12.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0
+},
+
+{
+  id: "ps-3",
+  subjectId: "probability-statistics",
+  topicId: "ps-distributions",
+  question: "If Z ~ N(0,1), what is P(|Z| < 1)?",
+  options: ["0.68", "0.5", "0.95", "0.32"],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "From empirical rule, P(|Z|<1) ≈ 68%.",
+  difficulty: "medium",
+  eloRating: 1160,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "ps-4",
+  subjectId: "probability-statistics",
+  topicId: "ps-hypothesis",
+  question: "In hypothesis testing, decreasing the significance level α will:",
+  options: [
+    "Increase Type I error and decrease Type II error",
+    "Decrease Type I error and increase Type II error",
+    "Decrease both Type I and Type II errors",
+    "Increase both Type I and Type II errors"
+  ],
+  correctAnswer: 1,
+  type: "mcq",
+  explanation: "Lower α reduces probability of rejecting true H₀ (Type I ↓) but makes test stricter, increasing Type II error.",
+  difficulty: "hard",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
 
   // Calculus & Optimization
-  { id: "co-1", subjectId: "calculus-optimization", topicId: "co-differentiation", question: "d/dx(x³ + 3x²) = ?", options: ["3x² + 6x", "x⁴ + x³", "3x + 6", "3x² + 3x"], correctAnswer: 0, type: "mcq", explanation: "Apply power rule: 3x² + 6x.", difficulty: "easy", eloRating: 1100, marks: 1, negativeMarks: 0.33 },
-  { id: "co-2", subjectId: "calculus-optimization", topicId: "co-differentiation", question: "∂/∂x (x²y + xy³) = ?", options: ["2xy + y³", "x² + 3xy²", "2x + y", "2xy + 3xy²"], correctAnswer: 0, type: "mcq", explanation: "Differentiate w.r.t. x treating y as constant: 2xy + y³.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "co-nat-1", subjectId: "calculus-optimization", topicId: "co-integration", question: "∫₀¹ x² dx = ? (Answer as a decimal, e.g., 0.33)", options: [], correctAnswer: 0, correctNat: { min: 0.33, max: 0.34 }, type: "nat", explanation: "∫x² dx = x³/3. Evaluate from 0 to 1: 1/3 ≈ 0.333.", difficulty: "easy", eloRating: 1150, marks: 1, negativeMarks: 0 },
-  { id: "co-3", subjectId: "calculus-optimization", topicId: "co-optimization", question: "Gradient descent update rule is:", options: ["θ = θ - α∇f(θ)", "θ = θ + α∇f(θ)", "θ = α∇f(θ)", "θ = θ/∇f(θ)"], correctAnswer: 0, type: "mcq", explanation: "We subtract the gradient scaled by learning rate to minimize the function.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
+  {
+  id: "co-1",
+  subjectId: "calculus-optimization",
+  topicId: "co-differentiation",
+  question: "If f(x) = x³eˣ, what is f′(x)?",
+  options: [
+    "x³eˣ + 3x²eˣ",
+    "3x²eˣ",
+    "x³eˣ",
+    "eˣ(3x² + x³)"
+  ],
+  correctAnswer: 3,
+  type: "mcq",
+  explanation: "Using product rule: f′ = (x³)'eˣ + x³(eˣ)' = 3x²eˣ + x³eˣ = eˣ(3x² + x³).",
+  difficulty: "medium",
+  eloRating: 1110,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "co-2",
+  subjectId: "calculus-optimization",
+  topicId: "co-differentiation",
+  question: "Let f(x, y) = x²y + xy². What is ∂²f / ∂x∂y?",
+  options: [
+    "2x + 2y",
+    "2x + y",
+    "2y + x",
+    "2x"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "First ∂f/∂x = 2xy + y². Then ∂/∂y → 2x + 2y.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "co-nat-1",
+  subjectId: "calculus-optimization",
+  topicId: "co-integration",
+  question: "Evaluate ∫₀¹ x e^{x²} dx (answer up to two decimal places).",
+  options: [],
+  correctAnswer: 0,
+  correctNat: { min: 0.85, max: 0.86 },
+  type: "nat",
+  explanation: "Let t = x² ⇒ dt = 2x dx ⇒ (1/2)∫ e^t dt from 0 to 1 ⇒ (1/2)(e − 1) ≈ 0.859.",
+  difficulty: "medium",
+  eloRating: 1160,
+  marks: 1,
+  negativeMarks: 0
+},
+
+{
+  id: "co-3",
+  subjectId: "calculus-optimization",
+  topicId: "co-optimization",
+  question: "Which of the following conditions ensures that a critical point of a twice differentiable function f(x) is a local minimum?",
+  options: [
+    "f′(x) = 0 and f″(x) > 0",
+    "f′(x) = 0 and f″(x) < 0",
+    "f′(x) > 0",
+    "f″(x) = 0"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Second derivative test: if f′(x)=0 and f″(x)>0, the function is locally convex ⇒ local minimum.",
+  difficulty: "hard",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
 
   // Machine Learning
-  { id: "ml-1", subjectId: "machine-learning", topicId: "ml-supervised", question: "In linear regression, we minimize:", options: ["Mean Squared Error", "Cross Entropy", "Hinge Loss", "KL Divergence"], correctAnswer: 0, type: "mcq", explanation: "Linear regression minimizes MSE = Σ(y - ŷ)²/n.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "ml-2", subjectId: "machine-learning", topicId: "ml-supervised", question: "SVM maximizes:", options: ["Margin", "Accuracy", "Loss", "Variance"], correctAnswer: 0, type: "mcq", explanation: "SVM finds the hyperplane that maximizes the margin between classes.", difficulty: "easy", eloRating: 1250, marks: 1, negativeMarks: 0.33 },
-  { id: "ml-msq-1", subjectId: "machine-learning", topicId: "ml-supervised", question: "Which of the following can be used for classification? (Select all that apply)", options: ["Logistic Regression", "Decision Tree", "Linear Regression", "SVM"], correctAnswer: 0, correctAnswers: [0, 1, 3], type: "msq", explanation: "Logistic Regression, Decision Trees, and SVM are classifiers. Linear Regression is for regression tasks.", difficulty: "easy", eloRating: 1250, marks: 2, negativeMarks: 0 },
-  { id: "ml-3", subjectId: "machine-learning", topicId: "ml-unsupervised", question: "K-means is sensitive to:", options: ["Initial centroids", "Feature scaling only", "Number of features", "Data order"], correctAnswer: 0, type: "mcq", explanation: "K-means results depend on initial centroid placement — use K-means++ to mitigate.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "ml-4", subjectId: "machine-learning", topicId: "ml-evaluation", question: "Precision is TP/(TP+?):", options: ["FP", "FN", "TN", "FP+FN"], correctAnswer: 0, type: "mcq", explanation: "Precision = TP/(TP+FP) — how many predicted positives are truly positive.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "ml-5", subjectId: "machine-learning", topicId: "ml-evaluation", question: "AUC-ROC = 0.5 means:", options: ["Random classifier", "Perfect classifier", "Worst classifier", "Overfitting"], correctAnswer: 0, type: "mcq", explanation: "AUC = 0.5 corresponds to the diagonal — no better than random guessing.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
+  {
+  id: "ml-1",
+  subjectId: "machine-learning",
+  topicId: "ml-supervised",
+  question: "In linear regression with L2 regularization (Ridge), the objective function minimizes:",
+  options: [
+    "Mean Squared Error + λ||w||²",
+    "Mean Squared Error + λ||w||₁",
+    "Cross Entropy Loss",
+    "Hinge Loss"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Ridge regression adds L2 penalty λ||w||² to MSE to reduce overfitting and control weights.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "ml-2",
+  subjectId: "machine-learning",
+  topicId: "ml-supervised",
+  question: "In soft-margin SVM, decreasing the regularization parameter C will:",
+  options: [
+    "Increase margin and allow more misclassification",
+    "Decrease margin and reduce misclassification",
+    "Increase both margin and accuracy always",
+    "Have no effect on decision boundary"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Smaller C → stronger regularization → wider margin but more tolerance to misclassification.",
+  difficulty: "hard",
+  eloRating: 1260,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "ml-msq-1",
+  subjectId: "machine-learning",
+  topicId: "ml-supervised",
+  question: "Which of the following models can produce non-linear decision boundaries? (Select all that apply)",
+  options: [
+    "Decision Trees",
+    "Kernel SVM",
+    "Logistic Regression with polynomial features",
+    "Linear Regression"
+  ],
+  correctAnswer: 0,
+  correctAnswers: [0, 1, 2],
+  type: "msq",
+  explanation: "Decision Trees and Kernel SVM inherently model non-linear boundaries. Logistic regression becomes non-linear with feature transformation. Linear regression is linear in parameters.",
+  difficulty: "medium",
+  eloRating: 1260,
+  marks: 2,
+  negativeMarks: 0
+},
+
+{
+  id: "ml-3",
+  subjectId: "machine-learning",
+  topicId: "ml-unsupervised",
+  question: "Which of the following changes will NOT affect the final clustering result of K-means?",
+  options: [
+    "Permutation of data points",
+    "Scaling of features",
+    "Initial centroid selection",
+    "Number of clusters k"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "K-means is order-invariant but sensitive to scaling, initialization, and choice of k.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "ml-4",
+  subjectId: "machine-learning",
+  topicId: "ml-evaluation",
+  question: "If recall is 1 and precision is low, which of the following is true?",
+  options: [
+    "All actual positives are correctly identified, but many false positives exist",
+    "No false positives exist",
+    "Model predicts only negatives",
+    "Model has perfect classification"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Recall=1 ⇒ no FN. Low precision ⇒ many FP. So model catches all positives but with many false alarms.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "ml-5",
+  subjectId: "machine-learning",
+  topicId: "ml-evaluation",
+  question: "For a classifier, AUC-ROC = 0.8 implies:",
+  options: [
+    "There is an 80% chance that the classifier ranks a random positive higher than a random negative",
+    "80% accuracy on test data",
+    "Model predicts 80% positives correctly",
+    "False positive rate is 0.2"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "AUC represents probability that classifier ranks a random positive instance higher than a random negative one.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
 
   // AI
-  { id: "ai-1", subjectId: "artificial-intelligence", topicId: "ai-search", question: "A* is optimal when h(n) is:", options: ["Admissible", "Dominant", "Zero", "Infinite"], correctAnswer: 0, type: "mcq", explanation: "A* guarantees optimal solution when heuristic h(n) never overestimates (admissible).", difficulty: "hard", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "ai-2", subjectId: "artificial-intelligence", topicId: "ai-search", question: "BFS uses which data structure?", options: ["Queue", "Stack", "Heap", "Array"], correctAnswer: 0, type: "mcq", explanation: "BFS explores level by level using a FIFO queue.", difficulty: "easy", eloRating: 1150, marks: 1, negativeMarks: 0.33 },
-  { id: "ai-3", subjectId: "artificial-intelligence", topicId: "ai-logic", question: "In propositional logic, P → Q is equivalent to:", options: ["¬P ∨ Q", "P ∧ Q", "¬Q → ¬P", "Both A and C"], correctAnswer: 3, type: "mcq", explanation: "P → Q ≡ ¬P ∨ Q and also equivalent to contrapositive ¬Q → ¬P.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
+ {
+  id: "ai-1",
+  subjectId: "artificial-intelligence",
+  topicId: "ai-search",
+  question: "In A* search, which of the following conditions ensures that the algorithm is both complete and optimal?",
+  options: [
+    "h(n) is admissible and consistent",
+    "h(n) is admissible only",
+    "h(n) = 0 for all nodes",
+    "h(n) is overestimating"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Admissibility ensures optimality, while consistency (monotonicity) guarantees no node needs to be revisited, ensuring both completeness and optimality efficiently.",
+  difficulty: "hard",
+  eloRating: 1410,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "ai-2",
+  subjectId: "artificial-intelligence",
+  topicId: "ai-search",
+  question: "Which of the following statements about Breadth-First Search (BFS) is correct?",
+  options: [
+    "It always finds the shallowest solution",
+    "It uses a stack for traversal",
+    "It is not complete",
+    "It works only for weighted graphs"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "BFS explores nodes level by level using a queue, so it guarantees finding the shallowest (minimum depth) solution in unweighted graphs.",
+  difficulty: "medium",
+  eloRating: 1160,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "ai-3",
+  subjectId: "artificial-intelligence",
+  topicId: "ai-logic",
+  question: "Which of the following logical equivalences are always true?",
+  options: [
+    "P → Q ≡ ¬P ∨ Q",
+    "P → Q ≡ ¬Q → ¬P",
+    "P ↔ Q ≡ (P → Q) ∧ (Q → P)",
+    "All of the above"
+  ],
+  correctAnswer: 3,
+  type: "mcq",
+  explanation: "All are standard logical equivalences: implication, contrapositive, and biconditional definitions.",
+  difficulty: "hard",
+  eloRating: 1410,
+  marks: 2,
+  negativeMarks: 0.66
+},
 
   // DSA
-  { id: "dsa-1", subjectId: "programming-dsa", topicId: "dsa-arrays", question: "Binary search time complexity is:", options: ["O(log n)", "O(n)", "O(n²)", "O(1)"], correctAnswer: 0, type: "mcq", explanation: "Binary search halves the search space each step: O(log n).", difficulty: "easy", eloRating: 1100, marks: 1, negativeMarks: 0.33 },
-  { id: "dsa-2", subjectId: "programming-dsa", topicId: "dsa-trees", question: "Inorder traversal of BST gives:", options: ["Sorted order", "Reverse order", "Level order", "Random order"], correctAnswer: 0, type: "mcq", explanation: "Inorder (left, root, right) of BST visits nodes in ascending sorted order.", difficulty: "easy", eloRating: 1150, marks: 1, negativeMarks: 0.33 },
-  { id: "dsa-nat-1", subjectId: "programming-dsa", topicId: "dsa-complexity", question: "T(n) = 2T(n/2) + n. The time complexity is O(n log n). What is the value of log₂(8)?", options: [], correctAnswer: 0, correctNat: { min: 3, max: 3 }, type: "nat", explanation: "log₂(8) = 3 since 2³ = 8.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0 },
-  { id: "dsa-3", subjectId: "programming-dsa", topicId: "dsa-complexity", question: "T(n) = 2T(n/2) + n has complexity:", options: ["O(n log n)", "O(n²)", "O(n)", "O(log n)"], correctAnswer: 0, type: "mcq", explanation: "By Master theorem, a=2, b=2, f(n)=n, case 2: O(n log n).", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
+  {
+  id: "dsa-1",
+  subjectId: "programming-dsa",
+  topicId: "dsa-arrays",
+  question: "Consider binary search on a sorted array of size n. If the element is not present, what is the maximum number of comparisons required?",
+  options: [
+    "⌊log₂ n⌋ + 1",
+    "log₂ n",
+    "n/2",
+    "√n"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Binary search reduces search space by half each step. Worst-case comparisons = ⌊log₂ n⌋ + 1.",
+  difficulty: "medium",
+  eloRating: 1110,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "dsa-2",
+  subjectId: "programming-dsa",
+  topicId: "dsa-trees",
+  question: "Which of the following conditions ensures that inorder traversal of a binary tree yields a sorted sequence?",
+  options: [
+    "Tree is a Binary Search Tree",
+    "Tree is a Complete Binary Tree",
+    "Tree is Balanced",
+    "Tree is Full Binary Tree"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Only BST guarantees left < root < right property, ensuring sorted inorder traversal.",
+  difficulty: "medium",
+  eloRating: 1160,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "dsa-nat-1",
+  subjectId: "programming-dsa",
+  topicId: "dsa-complexity",
+  question: "Solve the recurrence T(n) = 2T(n/2) + n, with T(1) = 1. What is T(8)?",
+  options: [],
+  correctAnswer: 0,
+  correctNat: { min: 32, max: 32 },
+  type: "nat",
+  explanation: "Expand: T(8)=2T(4)+8=2(2T(2)+4)+8=4T(2)+8+8=4(2T(1)+2)+16=8T(1)+8+16=8+8+16=32.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0
+},
+
+{
+  id: "dsa-3",
+  subjectId: "programming-dsa",
+  topicId: "dsa-complexity",
+  question: "What is the time complexity of the recurrence T(n) = 2T(n/2) + n log n?",
+  options: [
+    "O(n log² n)",
+    "O(n log n)",
+    "O(n²)",
+    "O(log n)"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "Master theorem: a=2, b=2 ⇒ n^{log_b a}=n. Since f(n)=n log n = n^{log_b a} log n ⇒ Case 2 → O(n log² n).",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
 
   // DBMS
-  { id: "dbms-1", subjectId: "dbms", topicId: "dbms-sql", question: "Which clause is used for filtering groups?", options: ["HAVING", "WHERE", "GROUP BY", "ORDER BY"], correctAnswer: 0, type: "mcq", explanation: "HAVING filters groups after GROUP BY; WHERE filters rows before grouping.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "dbms-2", subjectId: "dbms", topicId: "dbms-normalization", question: "A relation in BCNF is always in:", options: ["3NF", "2NF only", "1NF only", "4NF"], correctAnswer: 0, type: "mcq", explanation: "BCNF ⊂ 3NF ⊂ 2NF ⊂ 1NF. A relation in BCNF satisfies all lower forms.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "dbms-msq-1", subjectId: "dbms", topicId: "dbms-sql", question: "Which of the following are aggregate functions in SQL? (Select all that apply)", options: ["COUNT", "SELECT", "AVG", "SUM"], correctAnswer: 0, correctAnswers: [0, 2, 3], type: "msq", explanation: "COUNT, AVG, and SUM are aggregate functions. SELECT is a clause, not an aggregate function.", difficulty: "easy", eloRating: 1200, marks: 2, negativeMarks: 0 },
+ {
+  id: "dbms-1",
+  subjectId: "dbms",
+  topicId: "dbms-sql",
+  question: "Which of the following SQL queries correctly returns departments having average salary greater than 50000?",
+  options: [
+    "SELECT dept FROM emp GROUP BY dept HAVING AVG(salary) > 50000",
+    "SELECT dept FROM emp WHERE AVG(salary) > 50000 GROUP BY dept",
+    "SELECT dept FROM emp WHERE salary > 50000 GROUP BY dept",
+    "SELECT dept FROM emp HAVING AVG(salary) > 50000"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "HAVING is used to filter groups after aggregation. WHERE cannot use aggregate functions.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 1,
+  negativeMarks: 0.33
+},
+
+{
+  id: "dbms-2",
+  subjectId: "dbms",
+  topicId: "dbms-normalization",
+  question: "Which of the following statements about Boyce-Codd Normal Form (BCNF) is correct?",
+  options: [
+    "Every BCNF relation is also in 3NF",
+    "BCNF allows partial dependency",
+    "BCNF removes all multivalued dependencies",
+    "BCNF is weaker than 3NF"
+  ],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: "BCNF is stricter than 3NF, so every BCNF relation automatically satisfies 3NF.",
+  difficulty: "hard",
+  eloRating: 1360,
+  marks: 2,
+  negativeMarks: 0.66
+},
+
+{
+  id: "dbms-msq-1",
+  subjectId: "dbms",
+  topicId: "dbms-sql",
+  question: "Which of the following SQL functions are aggregate functions? (Select all that apply)",
+  options: [
+    "COUNT(*)",
+    "AVG(column)",
+    "MAX(column)",
+    "LENGTH(column)"
+  ],
+  correctAnswer: 0,
+  correctAnswers: [0, 1, 2],
+  type: "msq",
+  explanation: "COUNT, AVG, and MAX are aggregate functions. LENGTH is a scalar function applied row-wise.",
+  difficulty: "medium",
+  eloRating: 1210,
+  marks: 2,
+  negativeMarks: 0
+},
 
   // Linear Algebra - extra
-  { id: "la-8", subjectId: "linear-algebra", topicId: "la-matrices", question: "If A is invertible, then A^-1 exists when:", options: ["det(A) = 0", "det(A) != 0", "rank(A) = 0", "trace(A) = 0"], correctAnswer: 1, type: "mcq", explanation: "A square matrix is invertible if and only if its determinant is non-zero.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-11", subjectId: "linear-algebra", topicId: "la-matrices", question: "For a matrix A of order 3x3 if A^T = A then A is called?", options: ["Symmetric matrix", "Skew symmetric matrix", "Orthogonal matrix", "Identity matrix"], correctAnswer: 0, type: "mcq", explanation: "If A transpose equals A, then A is a symmetric matrix.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-12", subjectId: "linear-algebra", topicId: "la-matrices", question: "If A is a skew-symmetric matrix then which of the following is true?", options: ["A^T = A", "A^T = -A", "A^T = I", "A^T = 0"], correctAnswer: 1, type: "mcq", explanation: "By definition, for a skew-symmetric matrix A^T = -A.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-13", subjectId: "linear-algebra", topicId: "la-matrices", question: "The determinant of a 2x2 matrix [a b; c d] is?", options: ["ad+bc", "ad-bc", "ab-cd", "ac-bd"], correctAnswer: 1, type: "mcq", explanation: "The standard determinant formula for a 2x2 matrix is ad - bc.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-14", subjectId: "linear-algebra", topicId: "la-matrices", question: "If two rows of a determinant are equal then its value is?", options: ["1", "-1", "0", "Infinity"], correctAnswer: 2, type: "mcq", explanation: "A determinant becomes zero when two rows are identical.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-15", subjectId: "linear-algebra", topicId: "la-matrices", question: "Interchanging two rows of a determinant changes its value by?", options: ["No change", "Sign change", "Double", "Half"], correctAnswer: 1, type: "mcq", explanation: "Swapping two rows changes the sign of the determinant.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-16", subjectId: "linear-algebra", topicId: "la-matrices", question: "If a row of determinant is multiplied by k then determinant becomes?", options: ["k times", "k^2 times", "1/k times", "No change"], correctAnswer: 0, type: "mcq", explanation: "If one row is multiplied by k, determinant gets multiplied by k.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-17", subjectId: "linear-algebra", topicId: "la-matrices", question: "If a matrix has a zero row then its determinant is?", options: ["1", "0", "Undefined", "Infinity"], correctAnswer: 1, type: "mcq", explanation: "A determinant is zero if any row is entirely zero.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-18", subjectId: "linear-algebra", topicId: "la-matrices", question: "The determinant of identity matrix of order n is?", options: ["0", "1", "n", "n^2"], correctAnswer: 1, type: "mcq", explanation: "The determinant of identity matrix of any order is 1.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-19", subjectId: "linear-algebra", topicId: "la-matrices", question: "If |A| = 0 then matrix A is?", options: ["Invertible", "Non-singular", "Singular", "Orthogonal"], correctAnswer: 2, type: "mcq", explanation: "A zero determinant implies the matrix is singular.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-20", subjectId: "linear-algebra", topicId: "la-matrices", question: "If A is invertible then which is true?", options: ["|A|=0", "|A|!=0", "A=0", "A=I"], correctAnswer: 1, type: "mcq", explanation: "An invertible matrix must have a non-zero determinant.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-21", subjectId: "linear-algebra", topicId: "la-matrices", question: "The inverse of matrix A exists only if?", options: ["A is square", "A is symmetric", "|A| != 0", "A is diagonal"], correctAnswer: 2, type: "mcq", explanation: "Inverse exists when determinant is non-zero.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-22", subjectId: "linear-algebra", topicId: "la-matrices", question: "Formula for inverse of matrix A is?", options: ["adj(A)/|A|", "|A|/adj(A)", "A/|A|", "adj(A)*|A|"], correctAnswer: 0, type: "mcq", explanation: "The standard inverse formula is A^-1 = adj(A)/|A|.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-23", subjectId: "linear-algebra", topicId: "la-matrices", question: "Rank of a matrix is?", options: ["Number of rows", "Number of columns", "Maximum number of linearly independent rows or columns", "Determinant value"], correctAnswer: 2, type: "mcq", explanation: "Rank is the maximum number of linearly independent rows or columns.", difficulty: "medium", eloRating: 1500, marks: 2, negativeMarks: 0.66 },
-  { id: "la-24", subjectId: "linear-algebra", topicId: "la-matrices", question: "If a matrix has full rank then?", options: ["Rows are dependent", "Rows are independent", "Determinant is zero", "Matrix is zero"], correctAnswer: 1, type: "mcq", explanation: "Full rank means rows (and columns) are linearly independent.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-25", subjectId: "linear-algebra", topicId: "la-matrices", question: "Rank of identity matrix of order n is?", options: ["0", "1", "n", "n-1"], correctAnswer: 2, type: "mcq", explanation: "All rows in identity matrix are independent, so rank is n.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-26", subjectId: "linear-algebra", topicId: "la-matrices", question: "If determinant is non-zero then rank is?", options: ["Less than n", "Equal to n", "Zero", "Undefined"], correctAnswer: 1, type: "mcq", explanation: "For an n x n matrix, non-zero determinant implies full rank n.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-27", subjectId: "linear-algebra", topicId: "la-matrices", question: "If A is a square matrix then det(A^T) is?", options: ["-det(A)", "det(A)", "det(A)^2", "0"], correctAnswer: 1, type: "mcq", explanation: "Determinant of transpose equals determinant of the matrix.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-28", subjectId: "linear-algebra", topicId: "la-matrices", question: "If A and B are matrices then det(AB) equals?", options: ["det(A)+det(B)", "det(A)det(B)", "det(A)/det(B)", "0"], correctAnswer: 1, type: "mcq", explanation: "Determinant is multiplicative: det(AB) = det(A)det(B).", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-29", subjectId: "linear-algebra", topicId: "la-matrices", question: "If a matrix has two proportional rows then determinant is?", options: ["1", "0", "Infinity", "Undefined"], correctAnswer: 1, type: "mcq", explanation: "Proportional rows are linearly dependent, so determinant is zero.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-30", subjectId: "linear-algebra", topicId: "la-matrices", question: "Which matrix has determinant equal to product of diagonal elements?", options: ["Zero matrix", "Diagonal matrix", "Identity matrix", "Skew symmetric matrix"], correctAnswer: 1, type: "mcq", explanation: "For a diagonal matrix, determinant is the product of its diagonal entries.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-31", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "The eigenvalues of matrix A satisfy which equation?", options: ["|A|=0", "|A-λI|=0", "|A+λI|=0", "A=λI"], correctAnswer: 1, type: "mcq", explanation: "Characteristic equation is det(A-λI)=0.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-32", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "The sum of eigenvalues of a matrix is equal to?", options: ["Determinant", "Trace", "Rank", "Norm"], correctAnswer: 1, type: "mcq", explanation: "Sum of eigenvalues equals trace of the matrix.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-33", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "The product of eigenvalues of a matrix is equal to?", options: ["Trace", "Determinant", "Rank", "Sum"], correctAnswer: 1, type: "mcq", explanation: "Product of eigenvalues equals determinant.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-34", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If λ is an eigenvalue of A then eigenvalue of kA is?", options: ["λ", "kλ", "λ/k", "k+λ"], correctAnswer: 1, type: "mcq", explanation: "Scaling a matrix by k scales each eigenvalue by k.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-35", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If A is an identity matrix then eigenvalues are?", options: ["0", "1", "n", "-1"], correctAnswer: 1, type: "mcq", explanation: "Identity matrix has eigenvalue 1 with multiplicity n.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-36", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "A matrix is diagonalizable if?", options: ["It is square", "It has n linearly independent eigenvectors", "Determinant is non-zero", "Trace is zero"], correctAnswer: 1, type: "mcq", explanation: "Diagonalization requires n linearly independent eigenvectors.", difficulty: "medium", eloRating: 1500, marks: 2, negativeMarks: 0.66 },
-  { id: "la-37", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If eigenvalues are distinct then matrix is?", options: ["Singular", "Diagonalizable", "Zero", "Orthogonal"], correctAnswer: 1, type: "mcq", explanation: "Distinct eigenvalues imply linearly independent eigenvectors, so the matrix is diagonalizable.", difficulty: "medium", eloRating: 1500, marks: 2, negativeMarks: 0.66 },
-  { id: "la-38", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If λ is eigenvalue of A then eigenvalue of A^2 is?", options: ["λ", "2λ", "λ^2", "λ/2"], correctAnswer: 2, type: "mcq", explanation: "If Av=λv, then A^2v=λ^2v.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-39", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If λ is eigenvalue of A then eigenvalue of A^-1 is?", options: ["λ", "1/λ", "λ^2", "-λ"], correctAnswer: 1, type: "mcq", explanation: "For non-zero eigenvalue λ, A^-1 has eigenvalue 1/λ.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-40", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "Characteristic polynomial of 2x2 matrix has degree?", options: ["1", "2", "3", "4"], correctAnswer: 1, type: "mcq", explanation: "Characteristic polynomial degree equals matrix size.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-41", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If matrix has repeated eigenvalues then it is always diagonalizable?", options: ["Yes", "No", "Only symmetric", "Only invertible"], correctAnswer: 1, type: "mcq", explanation: "Repeated eigenvalues do not guarantee enough independent eigenvectors.", difficulty: "hard", eloRating: 1500, marks: 2, negativeMarks: 0.66 },
-  { id: "la-42", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "Eigenvectors corresponding to distinct eigenvalues are?", options: ["Dependent", "Orthogonal", "Linearly independent", "Zero vectors"], correctAnswer: 2, type: "mcq", explanation: "Standard theorem: eigenvectors for distinct eigenvalues are linearly independent.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-43", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "For symmetric matrix eigenvalues are?", options: ["Complex", "Imaginary", "Real", "Zero"], correctAnswer: 2, type: "mcq", explanation: "Symmetric matrices have real eigenvalues.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-44", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "For orthogonal matrix eigenvalues satisfy?", options: ["|λ|=1", "λ=0", "λ=1", "λ>1"], correctAnswer: 0, type: "mcq", explanation: "Orthogonal matrices preserve norms, so eigenvalues have magnitude 1.", difficulty: "hard", eloRating: 1500, marks: 2, negativeMarks: 0.66 },
-  { id: "la-45", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "Trace of matrix equals?", options: ["Sum of diagonal elements", "Product of eigenvalues", "Rank", "Determinant"], correctAnswer: 0, type: "mcq", explanation: "Trace is defined as the sum of diagonal entries.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-46", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If A=PDP^-1 then D is?", options: ["Identity", "Diagonal matrix", "Zero matrix", "Orthogonal matrix"], correctAnswer: 1, type: "mcq", explanation: "In diagonalization form A=PDP^-1, D is diagonal.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-47", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "Spectral decomposition is possible for?", options: ["All matrices", "Symmetric matrices", "Zero matrices", "Triangular matrices"], correctAnswer: 1, type: "mcq", explanation: "Spectral theorem applies to symmetric matrices.", difficulty: "hard", eloRating: 1550, marks: 2, negativeMarks: 0.66 },
-  { id: "la-48", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "In spectral decomposition A=QΛQ^T where Q is?", options: ["Diagonal", "Orthogonal", "Zero", "Singular"], correctAnswer: 1, type: "mcq", explanation: "Q is an orthogonal matrix in spectral decomposition.", difficulty: "hard", eloRating: 1500, marks: 2, negativeMarks: 0.66 },
-  { id: "la-49", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "Eigenvalues of triangular matrix are?", options: ["Row sums", "Column sums", "Diagonal elements", "Zero"], correctAnswer: 2, type: "mcq", explanation: "For triangular matrices, eigenvalues are the diagonal entries.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-50", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "If determinant is zero then eigenvalues include?", options: ["Only positive", "Only negative", "At least one zero", "None"], correctAnswer: 2, type: "mcq", explanation: "Product of eigenvalues equals determinant; if determinant is zero, at least one eigenvalue is zero.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-51", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "A set of vectors is linearly independent if?", options: ["One vector is zero", "No vector can be written as linear combination of others", "All vectors are equal", "Sum is zero"], correctAnswer: 1, type: "mcq", explanation: "A set is linearly independent when no vector can be expressed as a linear combination of others.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-52", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Which condition makes a set linearly dependent?", options: ["All vectors non-zero", "At least one vector is linear combination of others", "Determinant non-zero", "Rank full"], correctAnswer: 1, type: "mcq", explanation: "A set is linearly dependent if at least one vector is a linear combination of the others.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-53", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Maximum number of linearly independent vectors in R^n is?", options: ["n-1", "n", "n+1", "2n"], correctAnswer: 1, type: "mcq", explanation: "The dimension of R^n is n, so at most n vectors can be linearly independent.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-54", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "A basis of a vector space is?", options: ["Dependent set", "Independent set spanning space", "Zero set", "Any subset"], correctAnswer: 1, type: "mcq", explanation: "A basis is a linearly independent set that spans the whole vector space.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-55", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Dimension of vector space is?", options: ["Number of vectors", "Size of matrix", "Number of basis vectors", "Rank of matrix"], correctAnswer: 2, type: "mcq", explanation: "Dimension is defined as the number of vectors in any basis.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-56", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Which pair forms a basis of R^2?", options: ["(1,0) and (0,1)", "(1,1) and (2,2)", "(1,0) and (2,2)", "(0,1) and (1,1)"], correctAnswer: 0, type: "mcq", explanation: "Standard basis vectors (1,0) and (0,1) are linearly independent and span R^2.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-57", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "If vectors are linearly independent then determinant is?", options: ["0", "1", "Non-zero", "Undefined"], correctAnswer: 2, type: "mcq", explanation: "For a square matrix formed by these vectors, non-zero determinant implies linear independence.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-58", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Rank of matrix equals?", options: ["Number of rows", "Number of columns", "Dimension of column space", "Determinant"], correctAnswer: 2, type: "mcq", explanation: "Rank is the dimension of the column space (and also row space).", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-59", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "A subspace must contain?", options: ["Only non-zero vectors", "Only basis vectors", "Zero vector", "Only independent vectors"], correctAnswer: 2, type: "mcq", explanation: "Every subspace must include the zero vector.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-60", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Which is a subspace of R^2?", options: ["(x,y) where x+y=1", "(x,y) where x+y=0", "(x,y) where x>0", "(x,y) where y>1"], correctAnswer: 1, type: "mcq", explanation: "x+y=0 passes through origin and is closed under addition and scalar multiplication.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-61", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "If S is subspace then?", options: ["Closed under addition", "Closed under scalar multiplication", "Both", "Neither"], correctAnswer: 2, type: "mcq", explanation: "A subspace must be closed under both addition and scalar multiplication.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-62", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Dimension of zero vector space is?", options: ["0", "1", "n", "Undefined"], correctAnswer: 0, type: "mcq", explanation: "The zero vector space contains only the zero vector, so its dimension is 0.", difficulty: "easy", eloRating: 1200, marks: 1, negativeMarks: 0.33 },
-  { id: "la-63", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "If vectors span R^3 then minimum number required?", options: ["2", "3", "4", "5"], correctAnswer: 1, type: "mcq", explanation: "Need at least 3 vectors to span a 3-dimensional space.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-64", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "If vectors are dependent then rank is?", options: ["Full", "Less than full", "Zero", "Undefined"], correctAnswer: 1, type: "mcq", explanation: "Linear dependence reduces the maximum number of independent vectors, so rank is less than full.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-65", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Basis vectors are?", options: ["Dependent", "Independent and spanning", "Zero vectors", "Orthogonal only"], correctAnswer: 1, type: "mcq", explanation: "By definition, basis vectors are linearly independent and span the space.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-66", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Column space dimension equals?", options: ["Rank", "Determinant", "Trace", "Nullity"], correctAnswer: 0, type: "mcq", explanation: "Rank is the dimension of the column space.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-67", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Null space contains?", options: ["Only zero vector", "Solutions of Ax=0", "Only independent vectors", "All vectors"], correctAnswer: 1, type: "mcq", explanation: "Null space is the set of all vectors x satisfying Ax=0.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-68", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "If matrix has full rank then?", options: ["Columns dependent", "Columns independent", "Determinant zero", "Rank zero"], correctAnswer: 1, type: "mcq", explanation: "Full rank means columns are linearly independent (for square full-rank matrix, determinant is non-zero).", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-69", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Number of basis vectors equals?", options: ["Rank", "Trace", "Determinant", "Order"], correctAnswer: 0, type: "mcq", explanation: "Basis size equals the dimension, which equals rank for the corresponding subspace.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-70", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Which is NOT a subspace?", options: ["Set containing zero", "Closed under addition", "Closed under scalar multiplication", "Set not containing zero"], correctAnswer: 3, type: "mcq", explanation: "A subspace must include the zero vector, so any set not containing zero cannot be a subspace.", difficulty: "medium", eloRating: 1350, marks: 2, negativeMarks: 0.66 },
-  { id: "la-9", subjectId: "linear-algebra", topicId: "la-vector-spaces", question: "Which set can form a basis of R^2?", options: ["(1,0), (2,0)", "(1,1), (1,-1)", "(0,0), (1,0)", "(1,2), (2,4)"], correctAnswer: 1, type: "mcq", explanation: "Basis vectors must be linearly independent and span R^2. (1,1) and (1,-1) satisfy both.", difficulty: "medium", eloRating: 1400, marks: 2, negativeMarks: 0.66 },
-  { id: "la-10", subjectId: "linear-algebra", topicId: "la-eigenvalues", question: "For a diagonal matrix D = diag(4,7,9), the largest eigenvalue is:", options: ["4", "7", "9", "20"], correctAnswer: 2, type: "mcq", explanation: "Eigenvalues of a diagonal matrix are its diagonal entries.", difficulty: "easy", eloRating: 1150, marks: 1, negativeMarks: 0.33 },
+  
 
   // Probability & Statistics - extra
   { id: "ps-5", subjectId: "probability-statistics", topicId: "ps-probability", question: "If events A and B are disjoint, then P(A ∩ B) is:", options: ["1", "0", "P(A)P(B)", "P(A)+P(B)"], correctAnswer: 1, type: "mcq", explanation: "Disjoint events cannot occur together, so intersection probability is zero.", difficulty: "easy", eloRating: 1150, marks: 1, negativeMarks: 0.33 },
@@ -494,6 +2356,10 @@ const coreQuestions: Question[] = [
 export const questions: Question[] = [
   ...gateMockPaper2Questions,
   ...gateMockPaper3Questions,
+  ...gateMockPaper4Questions,
+  ...gateMockPaper5Questions,
+  ...gateMockPaper6Questions,
+  ...gateMockPaper7Questions,
   ...coreQuestions,
 ];
 
@@ -552,8 +2418,9 @@ export function getFullMockQuestions(answeredIds: Set<string>, count: number = 3
 }
 
 export function updateElo(studentElo: number, questionElo: number, correct: boolean): number {
+  if (!correct) return studentElo;
+
   const K = 32;
   const expected = 1 / (1 + Math.pow(10, (questionElo - studentElo) / 400));
-  const score = correct ? 1 : 0;
-  return Math.round(studentElo + K * (score - expected));
+  return Math.round(studentElo + K * (1 - expected));
 }

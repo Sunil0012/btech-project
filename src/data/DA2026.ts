@@ -73,7 +73,7 @@ export const da2026Questions = [
     correctAnswer: 0,
     type: "mcq",
     explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+    difficulty: "easy",
     marks: 2,
     negativeMarks: 0.66,
   },
@@ -86,7 +86,7 @@ export const da2026Questions = [
     correctAnswer: 1,
     type: "mcq",
     explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+    difficulty: "easy",
     marks: 2,
     negativeMarks: 0.66,
   },
@@ -112,7 +112,7 @@ export const da2026Questions = [
     correctAnswer: 2,
     type: "mcq",
     explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+    difficulty: "easy",
     marks: 2,
     negativeMarks: 0.66,
   },
@@ -455,8 +455,8 @@ export const da2026Questions = [
   },
   {
     id: "da2026-q35",
-    subjectId: "machine-learning",
-    topicId: "ml-supervised",
+    subjectId: "linear-algebra",
+    topicId: "la-vector-spaces",
     question: "The value of ∑ ∞ 𝑖=0 ∑ 2−𝑖 3−𝑗∞ 𝑗=1 is ______________ . (Answer in integer)",
     options: [],
     correctAnswer: 0,
@@ -495,8 +495,8 @@ export const da2026Questions = [
   },
   {
     id: "da2026-q38",
-    subjectId: "machine-learning",
-    topicId: "ml-supervised",
+    subjectId: "artificial-intelligence",
+    topicId: "ml-logic",
     question: "Assume that a Creative (𝐶) person will Succeed (𝑆) if the person is also Disciplined (𝐷), but will not succeed otherwise. Now, consider the following statements: (i) 𝐶 ⋀ 𝑆 ⇔ 𝐷 (ii) 𝐶 ⇒ (𝑆 ⟺ 𝐷) (iii) 𝐶 ⇔ ((𝐷 ⇒ 𝑆) ∨ ¬𝑆) Which of the following options is correct\"",
     options: ["Both (i) and (ii) are TRUE", "Only (ii) is TRUE", "Both (ii) and (iii) are TRUE", "Only (iii) is TRUE"],
     correctAnswer: 1,
@@ -559,15 +559,32 @@ export const da2026Questions = [
     negativeMarks: 0.66,
   },
   {
-    id: "da2026-q43",
-    subjectId: "machine-learning",
-    topicId: "ml-unsupervised",
-    question: "Consider the concept hierarchies as shown in the figure. Which of the following options denotes the total number of possible data cuboids from these concept hierarchies\"",
-    options: ["43", "23", "2!", "4!"],
-    correctAnswer: 0,
-    type: "mcq",
-    explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+  id: "da2026-q43",
+  subjectId: "dbms",
+  topicId: "data-warehousing-olap",
+  question: "A data warehouse contains 4 dimensions: Time (3 levels), Location (2 levels), Product (3 levels), and Customer (2 levels). Each dimension includes an 'ALL' level. What is the total number of possible data cuboids in the data cube?",
+  options: ["144", "72", "36", "24"],
+  correctAnswer: 0,
+  type: "mcq",
+  explanation: `
+  In OLAP, total number of cuboids is given by:
+
+  Total cuboids = product of (number of levels in each dimension)
+
+  Each dimension includes an additional 'ALL' level.
+
+  Time → 3 + 1 = 4 levels  
+  Location → 2 + 1 = 3 levels  
+  Product → 3 + 1 = 4 levels  
+  Customer → 2 + 1 = 3 levels  
+
+  Total cuboids:
+  = 4 × 3 × 4 × 3  
+  = 144
+
+  Hence, answer = 144
+    `,
+    difficulty: "hard",
     marks: 2,
     negativeMarks: 0.66,
   },
@@ -586,8 +603,8 @@ export const da2026Questions = [
   },
   {
     id: "da2026-q45",
-    subjectId: "machine-learning",
-    topicId: "ml-supervised",
+    subjectId: "calculus-optimization",
+    topicId: "co-optimization",
     question: "Let 𝐿 = lim 𝑛→∞ ∑ 𝑒−𝑛𝑛𝑘 𝑘! 𝑛 𝑘=0 Which of the following is the value of 𝐿\"",
     options: ["0.5", "1.0", "0", "𝑒−1"],
     correctAnswer: 0,
@@ -612,8 +629,8 @@ export const da2026Questions = [
   },
   {
     id: "da2026-q47",
-    subjectId: "machine-learning",
-    topicId: "ml-supervised",
+    subjectId: "calculus-optimization",
+    topicId: "co-optimization",
     question: "Consider that 20 stories of Author X and 10 stories of Author Y were kept together without mentioning the names of the authors. A classifier was then asked to predict the author (X or Y) of each of these stories. Let, out of X’s stories, 6 were classified as that of Y. On the other hand, out of Y’s stories, 2 were classified as that of X. Considering X and Y as two classes, which of the following statements is/are true\"",
     options: ["Accuracy of the classifier is 11/15.", "Precision of Class X is higher than the Precision of Class Y.", "Recall of Class X is higher than the Recall of Class Y.", "Accuracy of the classifier is 14/15."],
     correctAnswer: 0,
@@ -655,14 +672,14 @@ export const da2026Questions = [
   {
     id: "da2026-q50",
     subjectId: "programming-dsa",
-    topicId: "dsa-trees",
+    topicId: "dsa-arrays",
     question: "Consider the given Python program. def outer(): x = [] def inner(val): x.append(val) return x return inner f1 = outer() f2 = outer() print(f1(10)) # Line P print(f1(20)) # Line Q print(f2(30)) # Line R print(f1(40)) # Line S Which of the following options is/are correct\"",
     options: ["f1 and f2 share the same list x", "Output of Line Q is [10, 20]", "Output of Line R is [10, 20, 30]", "Output of Line S is [10, 20, 40]"],
     correctAnswer: 1,
     correctAnswers: [1, 3],
     type: "msq",
     explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+    difficulty: "easy",
     marks: 2,
     negativeMarks: 0,
   },
@@ -690,7 +707,7 @@ export const da2026Questions = [
     correctAnswers: [0, 3],
     type: "msq",
     explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+    difficulty: "hard",
     marks: 2,
     negativeMarks: 0,
   },
@@ -704,7 +721,7 @@ export const da2026Questions = [
     correctAnswers: [0, 1, 2],
     type: "msq",
     explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+    difficulty: "hard",
     marks: 2,
     negativeMarks: 0,
   },
@@ -732,7 +749,7 @@ export const da2026Questions = [
     correctNat: {"min": 6.9, "max": 7.1},
     type: "nat",
     explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+    difficulty: "hard",
     marks: 2,
     negativeMarks: 0,
   },
@@ -774,7 +791,7 @@ export const da2026Questions = [
     correctNat: {"min": 8, "max": 8},
     type: "nat",
     explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+    difficulty: "hard",
     marks: 2,
     negativeMarks: 0,
   },
@@ -788,7 +805,7 @@ export const da2026Questions = [
     correctNat: {"min": 3, "max": 3},
     type: "nat",
     explanation: "Imported from the official paper and answer key.",
-    difficulty: "medium",
+    difficulty: "hard",
     marks: 2,
     negativeMarks: 0,
   },
@@ -822,8 +839,8 @@ export const da2026Questions = [
   },
   {
     id: "da2026-q62",
-    subjectId: "machine-learning",
-    topicId: "ml-supervised",
+    subjectId: "calculus-optimization",
+    topicId: "co-optimization",
     question: "For a given data set {𝑥1, 𝑥2, … . , 𝑥𝑛}, where 𝑛 = 100, it is known that 1 2000∑ ∑(𝑥𝑖 − 𝑥𝑗)2 𝑛 𝑗=1 𝑛 𝑖=1 = 99 Let us denote 𝑥̅= 1 𝑛 ∑ 𝑥𝑖 𝑛 𝑖=1 The value of 1 99 ∑ (𝑥𝑖 − 𝑥̅)2𝑛 𝑖=1 is __________ . (Answer in integer)",
     options: [],
     correctAnswer: 0,

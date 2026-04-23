@@ -317,7 +317,8 @@ export function pickAssignmentQuestions({
 export function getQuestionsByAssignment(assignment: Pick<AssignmentRow, "question_ids" | "description">): Question[] {
   const parsedContent = parseAssignmentDescription(assignment.description);
   if (parsedContent.questionSource === "manual-quiz" && parsedContent.manualQuestions.length > 0) {
-    return parsedContent.manualQuestions;
+    // Validate manual questions are properly formed (have required fields)
+    return parsedContent.manualQuestions.filter((q) => q && q.id && q.question && typeof q.type === 'string');
   }
 
   if (!assignment.question_ids?.length) return [];

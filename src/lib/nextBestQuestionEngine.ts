@@ -45,7 +45,7 @@ export interface QuestionRecommendationGraph {
 }
 
 export interface NextBestQuestionRequest {
-  subjectId: string;
+  subjectId?: string | null;
   studentElo: number;
   topicId?: string | null;
   currentQuestionId?: string | null;
@@ -789,7 +789,7 @@ export function recommendNextBestAdaptiveQuestion(
 
   const available = questionBank.filter(
     (question) =>
-      question.subjectId === request.subjectId &&
+      (!request.subjectId || question.subjectId === request.subjectId) &&
       !excludedIds.has(question.id) &&
       (!request.constrainToTopic || !request.topicId || question.topicId === request.topicId)
   );

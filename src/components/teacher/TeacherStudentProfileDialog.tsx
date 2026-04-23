@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   BookOpen,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   Trophy,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -16,8 +18,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { RecommendationPathGraph } from "@/components/teacher/RecommendationPathGraph";
+import { toast } from "@/hooks/use-toast";
+import { deleteStudentProfileForSignedInTeacher } from "@/lib/classroomData";
 import type {
   ActivityEventRow,
   AssignmentRow,
@@ -38,6 +43,7 @@ interface TeacherStudentProfileDialogProps {
   submissions: SubmissionRow[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onDelete?: () => void;
 }
 
 export function TeacherStudentProfileDialog({
@@ -50,7 +56,11 @@ export function TeacherStudentProfileDialog({
   submissions,
   open,
   onOpenChange,
+  onDelete,
 }: TeacherStudentProfileDialogProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const profile = student
     ? buildTeacherStudentProfile({
         summary: student,
@@ -62,6 +72,32 @@ export function TeacherStudentProfileDialog({
         submissions,
       })
     : null;
+
+  const handleDeleteStudent = async () => {
+    if (!student) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteStudentProfileForSignedInTeacher(student.userId);
+
+      toast({
+        title: "Profile deleted",
+        description: `${student.name}'s profile has been permanently removed.`,
+      });
+
+      onOpenChange(false);
+      setShowDeleteConfirm(false);
+      onDelete?.();
+    } catch (error) {
+      toast({
+        title: "Could not delete profile",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -423,6 +459,74 @@ export function TeacherStudentProfileDialog({
                 </div>
               </section>
             )}
+
+            <section className="rounded-xl border border-red-200 bg-red-50/50 p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-red-900">Delete student profile</h3>
+                  <p className="mt-1 text-sm text-red-800">Permanently remove this student and all their data.</p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <ul className="space-y-2 text-sm text-red-700">
+                  <li className="ml-4 flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-600" />
+                    <span>Remove all enrollments from courses</span>
+                  </li>
+                  <li className="ml-4 flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-600" />
+                    <span>Delete all submissions and grades</span>
+                  </li>
+                  <li className="ml-4 flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-600" />
+                    <span>Clear all activity history</span>
+                  </li>
+                  <li className="ml-4 flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-600" />
+                    <span>Permanently delete the profile</span>
+                  </li>
+                </ul>
+
+                {showDeleteConfirm ? (
+                  <div className="rounded-lg border-2 border-red-300 bg-red-50 p-4">
+                    <p className="text-sm font-medium text-red-900">
+                      Are you absolutely sure? This action cannot be undone.
+                    </p>
+                    <div className="mt-4 flex gap-3">
+                      <Button
+                        variant="destructive"
+                        onClick={() => void handleDeleteStudent()}
+                        disabled={isDeleting}
+                        className="gap-2"
+                      >
+                        {isDeleting ? "Deleting..." : "Yes, delete permanently"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        disabled={isDeleting}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="gap-2"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    Delete student profile
+                  </Button>
+                )}
+              </div>
+            </section>
+
           </>
         )}
       </DialogContent>

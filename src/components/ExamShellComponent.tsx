@@ -4,34 +4,41 @@
  * skip/next, mark-for-review, exit confirmation, no explanations during attempt.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useStudentAuth } from "@/contexts/AuthContext";
-import { Question, getQuestionsBySubject, getQuestionsByTopic, questions as allQuestions } from "@/data/questions";
-import { getTopicById, getSubjectById } from "@/data/subjects";
+import { Question } from "@/data/questions";
+import { getTopicWiseTestQuestions } from "@/data/topicWiseTest";
+import { getAdaptiveQuestionBank } from "@/data/adaptiveTest";
+import { getAdaptiveMixQuestionBank } from "@/data/adaptiveMixTest";
 import { Navbar } from "@/components/Navbar";
-import { buildTestReviewPayload, calculateWarningBreakdown, type AttemptKind, type PracticeAnswer } from "@/lib/testReview";
+import {
+  buildRapidGuessWarning,
+  getRapidGuessAdjustedEloGain,
+  getRapidGuessThresholdSeconds,
+} from "@/lib/practiceReview";
+import {
+  buildTestReviewPayload,
+  calculateWarningBreakdown,
+  type AttemptKind,
+  type PracticeAnswer,
+  type QuestionSessionReviewPayload,
+} from "@/lib/testReview";
 import {
   createExamShellState,
   reduceExamShellState,
-  updatePaletteStatus,
   getAnswersArray,
   type ExamShellState,
   type ExamShellAction,
 } from "@/lib/examShellState";
 import {
   recommendNextBestAdaptiveQuestion,
-  type NextBestQuestionRecommendation,
+  type AdaptiveSessionAttempt,
 } from "@/lib/nextBestQuestionEngine";
-import {
-  buildRapidGuessWarning,
-  getRapidGuessPenalty,
-  getRapidGuessThresholdSeconds,
-} from "@/lib/practiceReview";
 import { logStudentActivityEvent } from "@/lib/activityEvents";
 import {
-  Clock, ChevronLeft, ChevronRight, Flag, X, CheckCircle2, AlertCircle, BookOpen, Eye, EyeOff,
+  Clock, ChevronLeft, ChevronRight, Flag, X, CheckCircle2,
 } from "lucide-react";
 
 interface ExamShellComponentProps {
@@ -47,6 +54,60 @@ interface ExamShellComponentProps {
   // Callbacks
   onComplete?: (payload: any) => void;
   onExit?: () => void;
+}
+
+function isAnsweredValue(answer: PracticeAnswer) {
+  return (
+    answer !== null &&
+    answer !== undefined &&
+    (typeof answer !== "string" || answer.trim() !== "") &&
+    (typeof answer !== "object" || (Array.isArray(answer) && answer.length > 0))
+  );
+}
+
+function isCorrectValue(question: Question, answer: PracticeAnswer) {
+  if (!isAnsweredValue(answer)) return false;
+
+  if (question.type === "mcq") {
+    return answer === question.correctAnswer;
+  }
+
+  if (question.type === "msq" && question.correctAnswers && Array.isArray(answer)) {
+    return (
+      question.correctAnswers.length === answer.length &&
+      question.correctAnswers.every((value) => answer.includes(value))
+    );
+  }
+
+  if (question.type === "nat" && question.correctNat && typeof answer === "string") {
+    const parsed = Number.parseFloat(answer);
+    return !Number.isNaN(parsed) && parsed >= question.correctNat.min && parsed <= question.correctNat.max;
+  }
+
+  return false;
+}
+
+function selectFallbackAdaptiveQuestion(
+  questionBank: Question[],
+  servedIds: Set<string>,
+  answeredIds: Set<string>,
+  studentElo: number,
+  subjectId?: string | null,
+  topicId?: string
+) {
+  return [...questionBank]
+    .filter((question) => {
+      if (subjectId && question.subjectId !== subjectId) return false;
+      if (topicId && question.topicId !== topicId) return false;
+      if (servedIds.has(question.id) || answeredIds.has(question.id)) return false;
+      return true;
+    })
+    .sort((left, right) => {
+      const leftGap = Math.abs(left.eloRating - studentElo);
+      const rightGap = Math.abs(right.eloRating - studentElo);
+      if (leftGap !== rightGap) return leftGap - rightGap;
+      return right.eloRating - left.eloRating;
+    })[0] || null;
 }
 
 export function ExamShellComponent({
@@ -68,68 +129,125 @@ export function ExamShellComponent({
     updateSubjectScore,
     recordTestHistory,
     studentElo,
+    setStudentElo,
   } = useStudentAuth();
 
   // Calculate duration based on timePerQuestion or use fixed duration
   const calculatedDurationMinutes = fixedDuration ?? questionCount * timePerQuestion;
 
+  const activeAdaptiveBank = useMemo(
+    () =>
+      adaptiveType === "mix"
+        ? getAdaptiveMixQuestionBank()
+        : getAdaptiveQuestionBank(subjectId || null),
+    [adaptiveType, subjectId]
+  );
+
+  const adaptiveSubjectId = adaptiveType === "mix" ? null : subjectId;
+  const sessionConfigKey = useMemo(
+    () =>
+      [
+        testType,
+        adaptiveType || "default",
+        subjectId || "all-subjects",
+        topicId || "all-topics",
+        questionCount,
+      ].join("::"),
+    [adaptiveType, questionCount, subjectId, testType, topicId]
+  );
+
   // Load questions
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [adaptiveSessionAttempts, setAdaptiveSessionAttempts] = useState<AdaptiveSessionAttempt[]>([]);
   const sessionIdRef = useRef(Math.random().toString(36).slice(2, 10));
+  const adaptiveExpandedIndicesRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
-    let availableQuestions: Question[] = [];
+    sessionIdRef.current = Math.random().toString(36).slice(2, 10);
+    adaptiveExpandedIndicesRef.current = new Set();
+    submittingRef.current = false;
+    setExamState(null);
+    setAdaptiveSessionAttempts([]);
+    setShowReviewMode(false);
+    setSubmitError(null);
 
-    // For adaptive mix test, pull from all subjects
-    if (testType === "adaptive" && adaptiveType === "mix") {
-      availableQuestions = allQuestions;
-    } else if (topicId) {
-      availableQuestions = getQuestionsByTopic(topicId);
-    } else {
-      availableQuestions = getQuestionsBySubject(subjectId);
+    if (testType === "topic-wise") {
+      setQuestions(
+        getTopicWiseTestQuestions({
+          subjectId: subjectId || undefined,
+          topicId: topicId || undefined,
+          count: questionCount,
+          answeredIds: answeredQuestions,
+        })
+      );
+      return;
     }
 
-    // Shuffle questions for mix type to ensure variety
-    if (testType === "adaptive" && adaptiveType === "mix") {
-      // Fisher-Yates shuffle
-      const shuffled = [...availableQuestions];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      const selected = shuffled.slice(0, questionCount);
-      setQuestions(selected);
-    } else {
-      // Limit to questionCount
-      const selected = availableQuestions.slice(0, questionCount);
-      setQuestions(selected);
-    }
-  }, [subjectId, topicId, questionCount, testType, adaptiveType]);
+    const seedRecommendation = recommendNextBestAdaptiveQuestion({
+      subjectId: adaptiveSubjectId,
+      studentElo,
+      topicId: topicId || null,
+      constrainToTopic: Boolean(topicId),
+      answeredQuestionIds: answeredQuestions,
+      sessionQuestionIds: new Set<string>(),
+      sessionAttempts: [],
+      questionBank: activeAdaptiveBank,
+    });
 
-  // Initialize exam shell state
+    const seedQuestion =
+      seedRecommendation.question ||
+      selectFallbackAdaptiveQuestion(
+        activeAdaptiveBank,
+        new Set<string>(),
+        answeredQuestions,
+        studentElo,
+        adaptiveSubjectId,
+        topicId
+      );
+
+    setQuestions(seedQuestion ? [seedQuestion] : []);
+  }, [
+    activeAdaptiveBank,
+    adaptiveSubjectId,
+    sessionConfigKey,
+    testType,
+    topicId,
+  ]);
+
   const [examState, setExamState] = useState<ExamShellState | null>(null);
   const [showExitConfirmation, setShowExitConfirmation] = useState(false);
   const [timerMinutes, setTimerMinutes] = useState(calculatedDurationMinutes);
   const [timerSeconds, setTimerSeconds] = useState(0);
+  const [questionTimeSpent, setQuestionTimeSpent] = useState(0);
+  const [showTimeWarning, setShowTimeWarning] = useState(false);
   const [showReviewMode, setShowReviewMode] = useState(false);
-  const [showExplanations, setShowExplanations] = useState(false);
   const submittingRef = useRef(false);
+  const lastWarningTimeRef = useRef<number>(0);
+  const [eloBreakdown, setEloBreakdown] = useState<Array<{ questionId: string; gain: number; penalty: number; total: number }>>();
 
   useEffect(() => {
     if (!questions.length || examState) return;
 
+    const targetQuestionCount =
+      testType === "adaptive" ? questionCount : Math.min(questionCount, questions.length);
+
     const state = createExamShellState({
       sessionId: sessionIdRef.current,
       testType,
-      totalQuestions: questions.length,
-      targetQuestions: Math.min(questionCount, questions.length),
+      totalQuestions: targetQuestionCount,
+      targetQuestions: targetQuestionCount,
       durationSeconds: calculatedDurationMinutes * 60,
     });
 
     setExamState(state);
   }, [questions, calculatedDurationMinutes, questionCount, testType, examState]);
 
-  // Timer effect
+  useEffect(() => {
+    setTimerMinutes(calculatedDurationMinutes);
+    setTimerSeconds(0);
+  }, [calculatedDurationMinutes]);
+
+  // Timer effect - update timer display
   useEffect(() => {
     if (!examState || examState.submitted || !examState.isTimerActive || !questions.length) return;
 
@@ -140,22 +258,66 @@ export function ExamShellComponent({
         const elapsed = (Date.now() - prev.timerStartedAt) / 1000;
         const remaining = Math.max(0, prev.durationSeconds - elapsed);
 
-        // Convert to minutes and seconds for display
-        setTimerMinutes(Math.floor(remaining / 60));
-        setTimerSeconds(Math.round(remaining % 60));
-
         if (remaining === 0) {
           return reduceExamShellState(prev, { type: "SUBMIT" });
         }
 
         return prev;
       });
-    }, 1000);
+    }, 500); // Update more frequently for smoother display
 
     return () => clearInterval(interval);
   }, [examState, questions.length]);
 
-  // Process state action
+  // Separate effect to update timer display values
+  useEffect(() => {
+    if (!examState) return;
+
+    const updateDisplay = () => {
+      const elapsed = (Date.now() - examState.timerStartedAt) / 1000;
+      const remaining = Math.max(0, examState.durationSeconds - elapsed);
+
+      setTimerMinutes(Math.floor(remaining / 60));
+      setTimerSeconds(Math.round(remaining % 60));
+
+      // Show warnings at specific intervals
+      if (remaining > 0 && remaining <= 300) {
+        // Show warning if less than 5 minutes and not shown recently
+        if (Date.now() - lastWarningTimeRef.current > 60000) {
+          setShowTimeWarning(true);
+          lastWarningTimeRef.current = Date.now();
+          // Auto hide warning after 3 seconds
+          setTimeout(() => setShowTimeWarning(false), 3000);
+        }
+      }
+    };
+
+    updateDisplay();
+    const interval = setInterval(updateDisplay, 500);
+    return () => clearInterval(interval);
+  }, [examState]);
+
+  // Track per-question time
+  useEffect(() => {
+    if (!examState || examState.submitted) return;
+
+    const updateQuestionTime = () => {
+      const currentSlot = examState.palette[examState.currentQuestionIndex];
+      if (currentSlot) {
+        const slotTimeSpent = currentSlot.timeSpentSeconds || 0;
+        const activeElapsedSeconds = Math.max(
+          0,
+          Math.floor((Date.now() - examState.lastNavigatedAt) / 1000)
+        );
+        setQuestionTimeSpent(slotTimeSpent + activeElapsedSeconds);
+      }
+    };
+
+    updateQuestionTime();
+    const interval = setInterval(updateQuestionTime, 500);
+    return () => clearInterval(interval);
+  }, [examState]);
+
   const processAction = useCallback((action: ExamShellAction) => {
     setExamState((prev) => {
       if (!prev) return prev;
@@ -167,6 +329,104 @@ export function ExamShellComponent({
   const currentAnswer = examState ? examState.answers.get(examState.currentQuestionIndex) : null;
   const isMarkedForReview = examState?.markedForReview.has(examState.currentQuestionIndex) ?? false;
 
+  const buildNextAdaptiveAttempt = useCallback(() => {
+    if (!examState || testType !== "adaptive") return adaptiveSessionAttempts;
+
+    const currentIndex = examState.currentQuestionIndex;
+    const activeQuestion = questions[currentIndex];
+    if (!activeQuestion) return adaptiveSessionAttempts;
+
+    const answer = examState.answers.get(currentIndex) ?? null;
+    if (!isAnsweredValue(answer)) return adaptiveSessionAttempts;
+
+    const nextAttempt: AdaptiveSessionAttempt = {
+      questionId: activeQuestion.id,
+      topicId: activeQuestion.topicId,
+      difficulty: activeQuestion.difficulty,
+      eloRating: activeQuestion.eloRating,
+      correct: isCorrectValue(activeQuestion, answer),
+    };
+
+    return [...adaptiveSessionAttempts, nextAttempt];
+  }, [adaptiveSessionAttempts, examState, questions, testType]);
+
+  const unlockAndNavigate = useCallback((targetIndex: number) => {
+    setExamState((prev) => {
+      if (!prev) return prev;
+      const unlockedState = prev.palette[targetIndex]?.isUnlocked
+        ? prev
+        : reduceExamShellState(prev, { type: "UNLOCK_NEXT_QUESTIONS_BLOCK" });
+      return reduceExamShellState(unlockedState, {
+        type: "NAVIGATE_TO_QUESTION",
+        payload: { questionIndex: targetIndex },
+      });
+    });
+  }, []);
+
+  const ensureAdaptiveNextQuestion = useCallback(() => {
+    if (!examState || testType !== "adaptive") return false;
+
+    const currentIndex = examState.currentQuestionIndex;
+    const nextIndex = currentIndex + 1;
+    if (nextIndex >= questionCount) return false;
+
+    if (questions[nextIndex]) return true;
+    if (adaptiveExpandedIndicesRef.current.has(currentIndex)) return Boolean(questions[nextIndex]);
+
+    adaptiveExpandedIndicesRef.current.add(currentIndex);
+    const nextSessionAttempts = buildNextAdaptiveAttempt();
+    if (nextSessionAttempts.length !== adaptiveSessionAttempts.length) {
+      setAdaptiveSessionAttempts(nextSessionAttempts);
+    }
+
+    const servedIds = new Set(questions.map((question) => question.id));
+    const currentQuestionForPath = questions[currentIndex];
+    const recommendation = recommendNextBestAdaptiveQuestion({
+      subjectId: adaptiveSubjectId,
+      studentElo,
+      topicId: topicId || null,
+      currentQuestionId: currentQuestionForPath?.id || null,
+      constrainToTopic: Boolean(topicId),
+      answeredQuestionIds: answeredQuestions,
+      sessionQuestionIds: servedIds,
+      sessionAttempts: nextSessionAttempts,
+      questionBank: activeAdaptiveBank,
+    });
+
+    const nextQuestion =
+      recommendation.question ||
+      selectFallbackAdaptiveQuestion(
+        activeAdaptiveBank,
+        servedIds,
+        answeredQuestions,
+        studentElo,
+        adaptiveSubjectId,
+        topicId
+      );
+
+    if (!nextQuestion) return false;
+
+    setQuestions((previous) =>
+      previous.some((question) => question.id === nextQuestion.id)
+        ? previous
+        : [...previous, nextQuestion]
+    );
+
+    return true;
+  }, [
+    activeAdaptiveBank,
+    adaptiveSessionAttempts.length,
+    adaptiveSubjectId,
+    answeredQuestions,
+    buildNextAdaptiveAttempt,
+    examState,
+    questionCount,
+    questions,
+    studentElo,
+    testType,
+    topicId,
+  ]);
+
   const handleAnswerChange = useCallback((answer: PracticeAnswer) => {
     processAction({
       type: "ANSWER_QUESTION",
@@ -176,6 +436,15 @@ export function ExamShellComponent({
       },
     });
   }, [examState?.currentQuestionIndex, processAction]);
+
+  const handleToggleMsqOption = useCallback((optionIndex: number) => {
+    if (!currentQuestion || currentQuestion.type !== "msq") return;
+    const existing = Array.isArray(currentAnswer) ? currentAnswer : [];
+    const nextValue = existing.includes(optionIndex)
+      ? existing.filter((value) => value !== optionIndex)
+      : [...existing, optionIndex].sort((left, right) => left - right);
+    handleAnswerChange(nextValue);
+  }, [currentAnswer, currentQuestion, handleAnswerChange]);
 
   const handleMarkForReview = useCallback(() => {
     if (!examState) return;
@@ -195,13 +464,20 @@ export function ExamShellComponent({
   const handleNext = useCallback(() => {
     if (!examState) return;
     const nextIdx = examState.currentQuestionIndex + 1;
-    if (nextIdx < examState.targetQuestions && examState.palette[nextIdx]?.isUnlocked) {
-      processAction({
-        type: "NAVIGATE_TO_QUESTION",
-        payload: { questionIndex: nextIdx },
-      });
+    if (nextIdx >= examState.targetQuestions) return;
+
+    if (testType === "adaptive") {
+      const ready = ensureAdaptiveNextQuestion();
+      if (!ready) return;
+      unlockAndNavigate(nextIdx);
+      return;
     }
-  }, [examState, processAction]);
+
+    processAction({
+      type: "NAVIGATE_TO_QUESTION",
+      payload: { questionIndex: nextIdx },
+    });
+  }, [ensureAdaptiveNextQuestion, examState, processAction, testType, unlockAndNavigate]);
 
   const handlePrevious = useCallback(() => {
     if (!examState) return;
@@ -216,8 +492,17 @@ export function ExamShellComponent({
 
   const handleSkip = useCallback(() => {
     if (!examState) return;
+    if (testType === "adaptive") {
+      const nextIdx = examState.currentQuestionIndex + 1;
+      if (nextIdx >= examState.targetQuestions) return;
+      const ready = ensureAdaptiveNextQuestion();
+      if (!ready) return;
+      unlockAndNavigate(nextIdx);
+      return;
+    }
+
     processAction({ type: "SKIP_QUESTION" });
-  }, [examState, processAction]);
+  }, [ensureAdaptiveNextQuestion, examState, processAction, testType, unlockAndNavigate]);
 
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -227,9 +512,14 @@ export function ExamShellComponent({
     setSubmitError(null);
 
     try {
+      const submissionTime = Date.now();
+      const finalizedState = reduceExamShellState(examState, {
+        type: "SUBMIT",
+        payload: { now: submissionTime },
+      });
       const attemptDurationSeconds = Math.min(
         calculatedDurationMinutes * 60,
-        Math.max(0, Math.round((Date.now() - examState.timerStartedAt) / 1000))
+        Math.max(0, Math.round((submissionTime - finalizedState.timerStartedAt) / 1000))
       );
 
       // Calculate results
@@ -237,49 +527,68 @@ export function ExamShellComponent({
       let totalMarks = 0;
       let maxMarks = 0;
       let attemptedCount = 0;
+      let nextElo = studentElo;
+      const questionReviews: QuestionSessionReviewPayload[] = [];
 
       questions.forEach((q, i) => {
-        const answer = examState.answers.get(i);
-        const isAnswered = answer !== null && answer !== undefined && (typeof answer !== "string" || answer.trim() !== "") && (typeof answer !== "object" || (Array.isArray(answer) && answer.length > 0));
-        const isCorrect = isAnswered && (
-          (q.type === "mcq" && answer === q.correctAnswer) ||
-          (q.type === "msq" && q.correctAnswers && Array.isArray(answer) && q.correctAnswers.length === answer.length && q.correctAnswers.every((v) => answer.includes(v))) ||
-          (q.type === "nat" && q.correctNat && typeof answer === "string" && !isNaN(parseFloat(answer)) && parseFloat(answer) >= q.correctNat.min && parseFloat(answer) <= q.correctNat.max)
-        );
+        const answer = finalizedState.answers.get(i) ?? null;
+        const isAnswered = isAnsweredValue(answer);
+        const isCorrect = isCorrectValue(q, answer);
+        const timeSpentSeconds = finalizedState.palette[i]?.timeSpentSeconds ?? 0;
+        const rapidGuessThresholdSeconds = getRapidGuessThresholdSeconds(q);
+        const rapidGuessWarning = isCorrect && timeSpentSeconds < rapidGuessThresholdSeconds;
+        let eloAdjustment = 0;
 
         maxMarks += q.marks;
         if (isCorrect) {
           totalMarks += q.marks;
           correctCount++;
+          const eloOutcome = getRapidGuessAdjustedEloGain(nextElo, q, timeSpentSeconds, true);
+          nextElo += eloOutcome.adjustedGain;
+          eloAdjustment = eloOutcome.appliedPenalty;
         } else if (isAnswered && q.type === "mcq") {
           totalMarks -= q.negativeMarks;
         }
 
-        if (isAnswered) attemptedCount++;
-        if (user) {
+        if (isAnswered) {
+          attemptedCount++;
           addAnsweredQuestion(q.id, isCorrect);
-          updateSubjectScore(q.subjectId, isCorrect);
+          updateSubjectScore(q.subjectId, isCorrect, q.topicId);
         }
+
+        questionReviews.push({
+          questionId: q.id,
+          correct: isCorrect,
+          timeSpentSeconds,
+          rapidGuessWarning,
+          rapidGuessThresholdSeconds,
+          eloAdjustment,
+          warningText: rapidGuessWarning ? buildRapidGuessWarning(q, timeSpentSeconds) : null,
+          remediationForQuestionId: null,
+        });
       });
+
+      setStudentElo(nextElo);
 
       // Build warning breakdown
       const warningBreakdown = calculateWarningBreakdown(0, testType);
 
       // Get answers in the correct format
-      const answersArray = getAnswersArray(examState, questions.length);
+      const answersArray = getAnswersArray(finalizedState, questions.length);
 
       // Build review payload with question IDs and answers
       const reviewPayload = buildTestReviewPayload({
         questions,
         answers: answersArray,
+        questionReviews,
         attemptKind: (testType === "topic-wise" ? "topic-wise" : "adaptive") as AttemptKind,
         countsForStats: true,
         countsForRating: true,
         warningBreakdown,
         reviewMetadata: {
           attemptDuration: attemptDurationSeconds,
-          startTime: new Date(examState.timerStartedAt).toISOString(),
-          endTime: new Date().toISOString(),
+          startTime: new Date(finalizedState.timerStartedAt).toISOString(),
+          endTime: new Date(submissionTime).toISOString(),
           testType,
         },
       });
@@ -288,7 +597,7 @@ export function ExamShellComponent({
       if (user) {
         await recordTestHistory({
           test_type: testType,
-          subject_id: subjectId,
+          subject_id: testType === "adaptive" && adaptiveType === "mix" ? null : subjectId,
           topic_id: topicId || null,
           score: totalMarks,
           max_score: maxMarks,
@@ -297,7 +606,7 @@ export function ExamShellComponent({
           total_questions: questions.length,
           violations: 0,
           duration_seconds: attemptDurationSeconds,
-          review_payload: reviewPayload,
+          review_payload: reviewPayload as any,
         });
 
         // Log activity
@@ -306,7 +615,7 @@ export function ExamShellComponent({
           actorRole: "student",
           actorName: user.email?.split("@")[0] || "Student",
           eventType: `${testType}_test_completed`,
-          subjectId,
+          subjectId: testType === "adaptive" && adaptiveType === "mix" ? null : subjectId,
           topicId: topicId || null,
           metadata: {
             test_type: testType,
@@ -320,20 +629,39 @@ export function ExamShellComponent({
       }
 
       // Mark exam as submitted
-      processAction({ type: "SUBMIT" });
+      setExamState(finalizedState);
 
       // Callback or redirect
       if (onComplete) {
         onComplete(reviewPayload);
-      } else {
-        navigate("/practice");
       }
     } catch (error) {
       console.error("Error submitting test:", error);
       setSubmitError(error instanceof Error ? error.message : "Failed to submit test. Please try again.");
       submittingRef.current = false;
     }
-  }, [examState, user, questions, calculatedDurationMinutes, testType, subjectId, topicId, recordTestHistory, addAnsweredQuestion, updateSubjectScore, navigate, onComplete, processAction]);
+  }, [
+    adaptiveType,
+    addAnsweredQuestion,
+    calculatedDurationMinutes,
+    examState,
+    onComplete,
+    processAction,
+    questions,
+    recordTestHistory,
+    setStudentElo,
+    studentElo,
+    subjectId,
+    testType,
+    topicId,
+    updateSubjectScore,
+    user,
+  ]);
+
+  useEffect(() => {
+    if (!examState?.submitted || submittingRef.current || !questions.length) return;
+    void handleSubmit();
+  }, [examState?.submitted, handleSubmit, questions.length]);
 
   const handleExit = useCallback(() => {
     setShowExitConfirmation(true);
@@ -366,13 +694,9 @@ export function ExamShellComponent({
     let attemptedCount = 0;
 
     questions.forEach((q, i) => {
-      const answer = examState.answers.get(i);
-      const isAnswered = answer !== null && answer !== undefined && (typeof answer !== "string" || answer.trim() !== "") && (typeof answer !== "object" || (Array.isArray(answer) && answer.length > 0));
-      const isCorrect = isAnswered && (
-        (q.type === "mcq" && answer === q.correctAnswer) ||
-        (q.type === "msq" && q.correctAnswers && Array.isArray(answer) && q.correctAnswers.length === answer.length && q.correctAnswers.every((v) => answer.includes(v))) ||
-        (q.type === "nat" && q.correctNat && typeof answer === "string" && !isNaN(parseFloat(answer)) && parseFloat(answer) >= q.correctNat.min && parseFloat(answer) <= q.correctNat.max)
-      );
+      const answer = examState.answers.get(i) ?? null;
+      const isAnswered = isAnsweredValue(answer);
+      const isCorrect = isCorrectValue(q, answer);
 
       maxMarks += q.marks;
       if (isCorrect) {
@@ -431,12 +755,8 @@ export function ExamShellComponent({
     const currentIdx = examState?.currentQuestionIndex || 0;
     const currentQuestion = questions[currentIdx];
     const currentAnswer = currentQuestion ? examState?.answers.get(currentIdx) : null;
-    const isCorrect = currentQuestion && (
-      (currentQuestion.type === "mcq" && currentAnswer === currentQuestion.correctAnswer) ||
-      (currentQuestion.type === "msq" && currentQuestion.correctAnswers && Array.isArray(currentAnswer) && currentQuestion.correctAnswers.length === currentAnswer.length && currentQuestion.correctAnswers.every((v) => currentAnswer.includes(v))) ||
-      (currentQuestion.type === "nat" && currentQuestion.correctNat && typeof currentAnswer === "string" && !isNaN(parseFloat(currentAnswer)) && parseFloat(currentAnswer) >= currentQuestion.correctNat.min && parseFloat(currentAnswer) <= currentQuestion.correctNat.max)
-    );
-    const isAnswered = currentAnswer !== null && currentAnswer !== undefined && (typeof currentAnswer !== "string" || currentAnswer.trim() !== "") && (typeof currentAnswer !== "object" || (Array.isArray(currentAnswer) && currentAnswer.length > 0));
+    const isCorrect = currentQuestion ? isCorrectValue(currentQuestion, currentAnswer ?? null) : false;
+    const isAnswered = isAnsweredValue(currentAnswer ?? null);
 
     return (
       <div className="min-h-screen bg-background">
@@ -504,11 +824,9 @@ export function ExamShellComponent({
 
                 <div className="grid md:grid-cols-8 gap-2 max-h-32 overflow-y-auto p-4 bg-muted/30 rounded-lg">
                   {questions.map((q, i) => {
-                    const ans = examState?.answers.get(i);
-                    const correct = (q.type === "mcq" && ans === q.correctAnswer) ||
-                      (q.type === "msq" && q.correctAnswers && Array.isArray(ans) && q.correctAnswers.length === ans.length && q.correctAnswers.every((v) => ans.includes(v))) ||
-                      (q.type === "nat" && q.correctNat && typeof ans === "string" && !isNaN(parseFloat(ans)) && parseFloat(ans) >= q.correctNat.min && parseFloat(ans) <= q.correctNat.max);
-                    const answered = ans !== null && ans !== undefined && (typeof ans !== "string" || ans.trim() !== "") && (typeof ans !== "object" || (Array.isArray(ans) && ans.length > 0));
+                    const ans = examState?.answers.get(i) ?? null;
+                    const correct = isCorrectValue(q, ans);
+                    const answered = isAnsweredValue(ans);
                     return (
                       <button
                         key={q.id}
@@ -539,7 +857,7 @@ export function ExamShellComponent({
     );
   }
 
-  const attemptedCount = Array.from(examState.answers.values()).filter(a => a !== null && a !== undefined && (typeof a !== "string" || a.trim() !== "") && (typeof a !== "object" || (Array.isArray(a) && a.length > 0))).length;
+  const attemptedCount = Array.from(examState.answers.values()).filter((answer) => isAnsweredValue(answer)).length;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -562,13 +880,15 @@ export function ExamShellComponent({
           <div className="flex items-center gap-4">
             <div className={`flex items-center gap-2 text-sm font-mono font-bold px-3 py-2 rounded-lg transition-all ${
               timerMinutes === 0 && timerSeconds < 60 
-                ? "bg-destructive text-destructive-foreground animate-pulse"
+                ? "bg-destructive text-destructive-foreground animate-pulse scale-105"
                 : timerMinutes < 5 
-                ? "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300"
+                ? "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border border-yellow-500/50 animate-pulse"
+                : timerMinutes < 10
+                ? "bg-orange-500/10 text-orange-700 dark:text-orange-300"
                 : "text-muted-foreground"
             }`}>
-              <Clock className={`h-5 w-5 ${timerMinutes === 0 && timerSeconds < 60 ? "animate-pulse" : ""}`} />
-              <span className={`text-lg ${timerMinutes === 0 && timerSeconds < 60 ? "font-bold" : ""}`}>
+              <Clock className={`h-5 w-5 ${timerMinutes < 5 ? "animate-pulse" : ""}`} />
+              <span className={`text-lg tabular-nums ${timerMinutes === 0 && timerSeconds < 60 ? "font-bold animate-pulse" : ""}`}>
                 {String(timerMinutes).padStart(2, "0")}:{String(timerSeconds).padStart(2, "0")}
               </span>
             </div>
@@ -579,6 +899,20 @@ export function ExamShellComponent({
         </div>
       </div>
 
+      {/* Time warning banner */}
+      {showTimeWarning && timerMinutes < 5 && (
+        <div className="bg-destructive/10 border-t border-b border-destructive/30 px-4 py-3 sticky top-16 z-20 animate-in fade-in slide-in-from-top">
+          <div className="container flex items-center gap-3">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-destructive">
+                ⏰ Time Running Out! {timerMinutes}:{String(timerSeconds).padStart(2, "0")} remaining
+              </p>
+              <p className="text-xs text-destructive/80 mt-0.5">Please hurry up and submit your answers soon.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <div className="flex-1 container py-8 grid md:grid-cols-4 gap-6">
         {/* Question content */}
@@ -588,7 +922,10 @@ export function ExamShellComponent({
               {/* Question text */}
               <div className="bg-card border rounded-lg p-6 space-y-4">
                 <div className="flex items-start justify-between gap-4">
-                  <h2 className="text-lg font-semibold">Question {examState.currentQuestionIndex + 1}</h2>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold">Question {examState.currentQuestionIndex + 1}</h2>
+                    <p className="text-xs text-muted-foreground mt-1">Time spent on this question: {Math.floor(questionTimeSpent / 60)}m {questionTimeSpent % 60}s</p>
+                  </div>
                   <Button
                     size="sm"
                     variant={isMarkedForReview ? "default" : "outline"}
@@ -601,9 +938,9 @@ export function ExamShellComponent({
                 </div>
                 <div className="text-muted-foreground">{currentQuestion.question}</div>
 
-                {currentQuestion.options && (
+                {currentQuestion.type === "mcq" && currentQuestion.options.length > 0 && (
                   <div className="space-y-2">
-                    {currentQuestion.options.map((opt, idx) => (
+                    {currentQuestion.options.map((option, idx) => (
                       <label key={idx} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted cursor-pointer">
                         <input
                           type="radio"
@@ -611,7 +948,23 @@ export function ExamShellComponent({
                           onChange={() => handleAnswerChange(idx)}
                           className="w-4 h-4"
                         />
-                        <span>{opt}</span>
+                        <span>{option}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {currentQuestion.type === "msq" && currentQuestion.options.length > 0 && (
+                  <div className="space-y-2">
+                    {currentQuestion.options.map((option, idx) => (
+                      <label key={idx} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Array.isArray(currentAnswer) && currentAnswer.includes(idx)}
+                          onChange={() => handleToggleMsqOption(idx)}
+                          className="w-4 h-4"
+                        />
+                        <span>{option}</span>
                       </label>
                     ))}
                   </div>
@@ -621,10 +974,16 @@ export function ExamShellComponent({
                   <input
                     type="text"
                     placeholder="Enter numerical answer"
-                    value={currentAnswer || ""}
+                    value={typeof currentAnswer === "string" ? currentAnswer : ""}
                     onChange={(e) => handleAnswerChange(e.target.value)}
                     className="w-full rounded-lg border px-3 py-2"
                   />
+                )}
+
+                {submitError && (
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    {submitError}
+                  </div>
                 )}
               </div>
 

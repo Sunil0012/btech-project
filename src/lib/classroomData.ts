@@ -578,7 +578,7 @@ export async function fetchTeacherWorkspace(userId: string): Promise<TeacherWork
   const enrollmentRows = (enrollmentsResult.data || []).map(normalizeEnrollmentRow);
   const assignmentList = (assignmentsResult.data || []) as AssignmentRow[];
   const assignmentIds = assignmentList.map((assignment) => assignment.id);
-  const studentIds = [...new Set(enrollmentRows.map((enrollment) => enrollment.student_id))];
+  const studentIds = [...new Set(enrollmentRows.map((enrollment) => enrollment.student_id))] as string[];
 
   const submissionsResult = assignmentIds.length === 0
     ? { data: [], error: null }
@@ -918,4 +918,93 @@ export function subscribeToClassroomChanges(channelName: string, onChange: () =>
 
     void teacherSupabase.removeChannel(channel);
   };
+}
+
+export async function deleteTeacherProfileForSignedInTeacher(userId: string) {
+  // First, delete all courses and related data (cascade will handle related records)
+  const { error: deleteCoursesError } = await teacherClassroomSupabase
+    .from("courses")
+    .delete()
+    .eq("teacher_id", userId);
+
+  if (deleteCoursesError) {
+    throw new Error(`Failed to delete courses: ${deleteCoursesError.message}`);
+  }
+
+  // Delete teacher record
+  const { error: deleteTeacherError } = await teacherClassroomSupabase
+    .from("teachers")
+    .delete()
+    .eq("user_id", userId);
+
+  if (deleteTeacherError) {
+    throw new Error(`Failed to delete teacher record: ${deleteTeacherError.message}`);
+  }
+
+  // Delete profile record
+  const { error: deleteProfileError } = await teacherSupabase
+    .from("profiles")
+    .delete()
+    .eq("user_id", userId);
+
+  if (deleteProfileError) {
+    throw new Error(`Failed to delete profile: ${deleteProfileError.message}`);
+  }
+
+  // Sign out the user after profile deletion
+  await teacherSupabase.auth.signOut();
+}
+
+export async function deleteStudentProfileForSignedInTeacher(studentUserId: string) {
+  await requireTeacherSession("delete the student profile");
+  
+  // Delete user progress records
+  const { error: deleteProgressError } = await teacherSupabase
+    .from("user_progress")
+    .delete()
+    .eq("user_id", studentUserId);
+
+  if (deleteProgressError) {
+    throw new Error(`Failed to delete student progress: ${deleteProgressError.message}`);
+  }
+
+  // Delete test history records
+  const { error: deleteTestHistoryError } = await teacherSupabase
+    .from("test_history")
+    .delete()
+    .eq("user_id", studentUserId);
+
+  if (deleteTestHistoryError) {
+    throw new Error(`Failed to delete student test history: ${deleteTestHistoryError.message}`);
+  }
+
+  // Delete activity events for the student
+  const { error: deleteActivityError } = await (teacherSupabase as any)
+    .from("activity_events")
+    .delete()
+    .eq("user_id", studentUserId);
+
+  if (deleteActivityError) {
+    throw new Error(`Failed to delete student activity events: ${deleteActivityError.message}`);
+  }
+
+  // Delete enrollments (which cascades to submissions and other related records)
+  const { error: deleteEnrollmentsError } = await teacherClassroomSupabase
+    .from("enrollments")
+    .delete()
+    .eq("student_id", studentUserId);
+
+  if (deleteEnrollmentsError) {
+    throw new Error(`Failed to delete student enrollments: ${deleteEnrollmentsError.message}`);
+  }
+
+  // Delete the profile record
+  const { error: deleteProfileError } = await teacherSupabase
+    .from("profiles")
+    .delete()
+    .eq("user_id", studentUserId);
+
+  if (deleteProfileError) {
+    throw new Error(`Failed to delete student profile: ${deleteProfileError.message}`);
+  }
 }

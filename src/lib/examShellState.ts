@@ -61,6 +61,39 @@ export interface ExamShellAction {
   payload?: Record<string, any>;
 }
 
+function getActionTimestamp(action: ExamShellAction): number {
+  return typeof action.payload?.now === "number" ? action.payload.now : Date.now();
+}
+
+function accumulateCurrentQuestionTime(
+  state: ExamShellState,
+  now: number
+): ExamShellState {
+  const currentSlot = state.palette[state.currentQuestionIndex];
+  if (!currentSlot) {
+    return now === state.lastNavigatedAt ? state : { ...state, lastNavigatedAt: now };
+  }
+
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((now - state.lastNavigatedAt) / 1000)
+  );
+
+  if (elapsedSeconds === 0) {
+    return now === state.lastNavigatedAt ? state : { ...state, lastNavigatedAt: now };
+  }
+
+  return {
+    ...state,
+    palette: state.palette.map((slot, index) =>
+      index === state.currentQuestionIndex
+        ? { ...slot, timeSpentSeconds: slot.timeSpentSeconds + elapsedSeconds }
+        : slot
+    ),
+    lastNavigatedAt: now,
+  };
+}
+
 /**
  * Initialize exam shell state
  */
@@ -79,10 +112,10 @@ export function createExamShellState({
 }): ExamShellState {
   const now = Date.now();
   
-  // For topic-wise: show all target slots, all unlocked
-  // For adaptive: show all target slots, but only first block unlocked
+  // For topic-wise: show all target slots, all unlocked.
+  // For adaptive: unlock only the first slot and reveal the path one question at a time.
   const isAdaptive = testType === "adaptive";
-  const unlockedCount = isAdaptive ? Math.min(5, targetQuestions) : targetQuestions;
+  const unlockedCount = isAdaptive ? Math.min(1, targetQuestions) : targetQuestions;
   
   const palette: ExamPaletteSlot[] = Array.from({ length: targetQuestions }, (_, i) => ({
     questionIndex: i,
@@ -203,11 +236,13 @@ export function reduceExamShellState(
         return state;
       }
 
+      const now = getActionTimestamp(action);
+      const timedState = accumulateCurrentQuestionTime(state, now);
+
       return {
-        ...state,
+        ...timedState,
         currentQuestionIndex: questionIndex,
-        visitedIndices: new Set([...state.visitedIndices, questionIndex]),
-        lastNavigatedAt: Date.now(),
+        visitedIndices: new Set([...timedState.visitedIndices, questionIndex]),
       };
     }
 
@@ -218,11 +253,13 @@ export function reduceExamShellState(
         .find((i) => state.palette[i]?.isUnlocked);
 
       if (nextIndex !== undefined) {
+        const now = getActionTimestamp(action);
+        const timedState = accumulateCurrentQuestionTime(state, now);
+
         return {
-          ...state,
+          ...timedState,
           currentQuestionIndex: nextIndex,
-          visitedIndices: new Set([...state.visitedIndices, nextIndex]),
-          lastNavigatedAt: Date.now(),
+          visitedIndices: new Set([...timedState.visitedIndices, nextIndex]),
         };
       }
 
@@ -230,11 +267,11 @@ export function reduceExamShellState(
     }
 
     case "UNLOCK_NEXT_QUESTIONS_BLOCK": {
-      // Unlock next block of 5 questions (adaptive only)
+      // Unlock the next question slot (adaptive only).
       if (state.testType !== "adaptive") return state;
 
       const unlockedCount = state.palette.filter((s) => s.isUnlocked).length;
-      const nextBlockEnd = Math.min(unlockedCount + 5, state.targetQuestions);
+      const nextBlockEnd = Math.min(unlockedCount + 1, state.targetQuestions);
 
       const newPalette = state.palette.map((slot, i) => ({
         ...slot,
@@ -245,13 +282,14 @@ export function reduceExamShellState(
     }
 
     case "TICK_TIMER": {
-      const now = Date.now();
-      const elapsed = (now - state.timerStartedAt) / 1000;
-      const remaining = Math.max(0, state.durationSeconds - elapsed);
+      const now = getActionTimestamp(action);
+      const totalElapsedSeconds = (now - state.timerStartedAt) / 1000;
+      const remaining = Math.max(0, state.durationSeconds - totalElapsedSeconds);
 
       if (remaining === 0) {
+        const timedState = accumulateCurrentQuestionTime(state, now);
         return {
-          ...state,
+          ...timedState,
           isTimerActive: false,
           timerCompletedAt: now,
           durationSeconds: 0,
@@ -259,15 +297,17 @@ export function reduceExamShellState(
         };
       }
 
-      return { ...state, durationSeconds: remaining };
+      return state;
     }
 
     case "SUBMIT": {
+      const now = getActionTimestamp(action);
+      const timedState = accumulateCurrentQuestionTime(state, now);
       return {
-        ...state,
+        ...timedState,
         submitted: true,
         isTimerActive: false,
-        timerCompletedAt: Date.now(),
+        timerCompletedAt: now,
       };
     }
 

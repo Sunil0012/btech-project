@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CheckCircle2, Lock, Monitor, Moon, Save, Sun, User } from "lucide-react";
+import { CheckCircle2, Lock, Monitor, Moon, Save, Sun, User, AlertTriangle } from "lucide-react";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { TeacherMetricCard } from "@/components/teacher/TeacherMetricCard";
 import { TeacherWorkspaceHeader } from "@/components/teacher/TeacherWorkspaceHeader";
@@ -10,17 +10,21 @@ import { useTeacherWorkspace } from "@/hooks/useTeacherWorkspace";
 import { teacherSupabase } from "@/integrations/supabase/teacher-client";
 import { toast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/ThemeProvider";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { deleteTeacherProfileForSignedInTeacher } from "@/lib/classroomData";
 
 function TeacherSettingsPage() {
   const { user, profile } = useTeacherAuth();
   const { workspace } = useTeacherWorkspace();
   const { theme, setTheme } = useTheme();
+  const navigate = useNavigate();
   const [fullName, setFullName] = useState(profile?.full_name || user?.user_metadata?.full_name || "");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingProfile, setDeletingProfile] = useState(false);
 
   const totalStudents = useMemo(
     () => new Set(workspace.enrollments.map((enrollment) => enrollment.student_id)).size,
@@ -105,6 +109,40 @@ function TeacherSettingsPage() {
       });
     } finally {
       setSavingPassword(false);
+    }
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!user?.id) {
+      toast({
+        title: "Cannot delete profile",
+        description: "User ID not found.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDeletingProfile(true);
+
+    try {
+      await deleteTeacherProfileForSignedInTeacher(user.id);
+      
+      toast({
+        title: "Profile deleted",
+        description: "Your teacher account has been permanently removed.",
+      });
+
+      // Redirect to login page after successful deletion
+      navigate("/login");
+    } catch (error) {
+      setShowDeleteConfirm(false);
+      toast({
+        title: "Could not delete profile",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingProfile(false);
     }
   };
 
@@ -313,6 +351,76 @@ function TeacherSettingsPage() {
                   <p className="text-sm text-muted-foreground">Submissions received</p>
                   <p className="mt-2 text-2xl font-bold text-foreground">{workspace.submissions.length}</p>
                 </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-red-200 bg-red-50/50 p-6 shadow-sm">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-100">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-semibold text-red-900">Danger zone</h3>
+                  <p className="mt-1 text-sm text-red-800">Permanently delete your teacher profile and all associated data.</p>
+                </div>
+              </div>
+
+              <div className="mt-6 space-y-4">
+                <p className="text-sm text-red-700">
+                  <strong>Warning:</strong> Deleting your profile will:
+                </p>
+                <ul className="space-y-2 text-sm text-red-700">
+                  <li className="ml-4 flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-600" />
+                    <span>Permanently remove all your courses and assignments</span>
+                  </li>
+                  <li className="ml-4 flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-600" />
+                    <span>Remove all student enrollments in your courses</span>
+                  </li>
+                  <li className="ml-4 flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-600" />
+                    <span>Delete all submissions and grades</span>
+                  </li>
+                  <li className="ml-4 flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-600" />
+                    <span>Permanently delete your teacher account</span>
+                  </li>
+                </ul>
+
+                {showDeleteConfirm ? (
+                  <div className="mt-6 rounded-lg border-2 border-red-300 bg-red-50 p-4">
+                    <p className="text-sm font-medium text-red-900">
+                      Are you absolutely sure? This action cannot be undone.
+                    </p>
+                    <div className="mt-4 flex gap-3">
+                      <Button
+                        variant="destructive"
+                        onClick={() => void handleDeleteProfile()}
+                        disabled={deletingProfile}
+                        className="gap-2"
+                      >
+                        {deletingProfile ? "Deleting..." : "Yes, delete my profile"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowDeleteConfirm(false)}
+                        disabled={deletingProfile}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="mt-4 gap-2"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    Delete profile
+                  </Button>
+                )}
               </div>
             </div>
           </div>

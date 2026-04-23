@@ -1,300 +1,191 @@
-/**
- * Student Insights Page
- * Displays comprehensive analytics: subject accuracy, test trends, completion metrics,
- * warning patterns, weak/strong topics, and AI-generated insights.
- */
-
-import { useState, useEffect, useMemo } from "react";
-import { Navbar } from "@/components/Navbar";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  BookOpen,
+  Brain,
+  CalendarDays,
+  Flame,
+  ShieldAlert,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Trophy,
+} from "lucide-react";
 import { Footer } from "@/components/Footer";
+import { Navbar } from "@/components/Navbar";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Button } from "@/components/ui/button";
+import { questions as allQuestions } from "@/data/questions";
 import { useStudentAuth } from "@/contexts/AuthContext";
 import { studentSupabase } from "@/integrations/supabase/student-client";
 import type { StudentTables } from "@/integrations/supabase/student-types";
-import { visibleSubjects } from "@/data/subjects";
-import { generateAIInsights, AIInsightResult } from "@/lib/aiCoach";
-import {
-  BarChart3, TrendingUp, Target, Brain, Sparkles,
-  BookOpen, Zap, AlertCircle, Trophy, Calendar,
-} from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Cell,
-  LineChart,
-  Line,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Legend,
-} from "recharts";
-import { Link } from "react-router-dom";
+import { generateAIInsights, type AIInsightResult } from "@/lib/aiCoach";
+import { buildStudentAnalyticsSummary } from "@/lib/studentAnalytics";
 
-// Recharts with proper naming
-const RechartsLineChart = LineChart;
-const RechartsBarChart = BarChart;
-const RechartsPieChart = PieChart;
-const RechartsXAxis = XAxis;
-const RechartsYAxis = YAxis;
-const RechartsTooltip = Tooltip;
-const RechartsCartesianGrid = CartesianGrid;
-const RechartsCell = Cell;
-const RechartLine = Line;
-const RechartsBar = Bar;
-const RechartsPie = Pie;
-const RechartsLegend = Legend;
-const RechartsResponsiveContainer = ResponsiveContainer;
-
-interface TestMetrics {
-  totalTests: number;
-  averageScore: number;
-  totalMinutes: number;
-  bestScore: number;
-  worstScore: number;
-  answerAccuracy: number;
-}
-
-interface SubjectMetrics {
-  subjectId: string;
-  subjectName: string;
-  totalAttempts: number;
-  correctAnswers: number;
-  totalAnswers: number;
-  accuracy: number;
-  averageScore: number;
-}
-
-interface TopicMetrics {
-  topicId: string;
-  topicName: string;
-  totalAttempts: number;
-  accuracy: number;
-  status: "weak" | "developing" | "strong";
-}
-
-interface WarningMetrics {
-  focusLossCount: number;
-  rapidGuessCount: number;
-  timingWarningsCount: number;
-}
+const PIE_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444"];
 
 export default function InsightsPage() {
-  const { user, subjectScores } = useStudentAuth();
+  const { user, studentElo } = useStudentAuth();
   const [testHistory, setTestHistory] = useState<StudentTables<"test_history">[]>([]);
   const [userProgress, setUserProgress] = useState<StudentTables<"user_progress">[]>([]);
+  const [activityRows, setActivityRows] = useState<StudentTables<"activity_events">[]>([]);
+  const [profileStreak, setProfileStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [aiInsights, setAiInsights] = useState<AIInsightResult | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     const fetchData = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
+        const [historyResult, progressResult, activityResult, profileResult] = await Promise.all([
+          studentSupabase
+            .from("test_history")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("completed_at", { ascending: false }),
+          studentSupabase
+            .from("user_progress")
+            .select("*")
+            .eq("user_id", user.id),
+          studentSupabase
+            .from("activity_events")
+            .select("*")
+            .or(`actor_id.eq.${user.id},target_user_id.eq.${user.id}`)
+            .order("created_at", { ascending: false }),
+          studentSupabase
+            .from("profiles")
+            .select("streak_count")
+            .eq("user_id", user.id)
+            .maybeSingle(),
+        ]);
 
-        // Fetch test history
-        const { data: historyData } = await studentSupabase
-          .from("test_history")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("completed_at", { ascending: false });
-
-        if (historyData) {
-          setTestHistory(historyData);
-        }
-
-        // Fetch user progress
-        const { data: progressData } = await studentSupabase
-          .from("user_progress")
-          .select("*")
-          .eq("user_id", user.id);
-
-        if (progressData) {
-          setUserProgress(progressData);
-        }
-
+        setTestHistory(historyResult.data || []);
+        setUserProgress(progressResult.data || []);
+        setActivityRows(activityResult.data || []);
+        setProfileStreak(profileResult.data?.streak_count || 0);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
+    void fetchData();
   }, [user]);
 
-  // Calculate test metrics
-  const testMetrics = useMemo((): TestMetrics => {
-    if (testHistory.length === 0) {
-      return {
-        totalTests: 0,
-        averageScore: 0,
-        totalMinutes: 0,
-        bestScore: 0,
-        worstScore: 0,
-        answerAccuracy: 0,
-      };
-    }
+  const analyticsSummary = useMemo(() => buildStudentAnalyticsSummary({
+    testHistory,
+    userProgress,
+    activityRows,
+    profileStreak,
+    totalQuestionBankCount: allQuestions.length,
+  }), [activityRows, profileStreak, testHistory, userProgress]);
 
-    const scores = testHistory.map((t) => t.score || 0);
-    const accuracies = testHistory.map((t) =>
-      t.total_questions > 0 ? (t.correct_answers || 0) / t.total_questions : 0
-    );
+  const overallAccuracy = analyticsSummary.questionsAnswered > 0
+    ? Math.round((analyticsSummary.correctAnswers / analyticsSummary.questionsAnswered) * 100)
+    : 0;
 
-    return {
-      totalTests: testHistory.length,
-      averageScore: scores.reduce((a, b) => a + b, 0) / scores.length,
-      totalMinutes: (testHistory.reduce((a, t) => a + (t.duration_seconds || 0), 0) / 60),
-      bestScore: Math.max(...scores),
-      worstScore: Math.min(...scores),
-      answerAccuracy: accuracies.reduce((a, b) => a + b, 0) / accuracies.length,
-    };
-  }, [testHistory]);
-
-  // Calculate subject metrics
-  const subjectMetrics = useMemo((): SubjectMetrics[] => {
-    return visibleSubjects
-      .map((subject) => {
-        const progress = userProgress.find((p) => p.subject_id === subject.id);
-        const tests = testHistory.filter((t) => t.subject_id === subject.id);
-
-        return {
-          subjectId: subject.id,
-          subjectName: subject.name,
-          totalAttempts: tests.length,
-          correctAnswers: progress?.correct || 0,
-          totalAnswers: progress?.total || 0,
-          accuracy: progress && progress.total > 0 ? (progress.correct / progress.total) * 100 : 0,
-          averageScore: tests.length > 0 ? tests.reduce((a, t) => a + (t.score || 0), 0) / tests.length : 0,
-        };
-      })
-      .filter((m) => m.totalAttempts > 0 || m.totalAnswers > 0);
-  }, [testHistory, userProgress]);
-
-  // Calculate topic metrics
-  const topicMetrics = useMemo((): TopicMetrics[] => {
-    const topics: Map<string, TopicMetrics> = new Map();
-
-    userProgress.forEach((progress) => {
-      if (!progress.topic_id) return;
-
-      const topic = visibleSubjects
-        .flatMap((s) => s.topics)
-        .find((t) => t.id === progress.topic_id);
-
-      if (!topic) return;
-
-      const accuracy = progress.total > 0 ? (progress.correct / progress.total) * 100 : 0;
-      const status: "weak" | "developing" | "strong" =
-        accuracy >= 75 ? "strong" : accuracy >= 50 ? "developing" : "weak";
-
-      topics.set(progress.topic_id, {
-        topicId: progress.topic_id,
-        topicName: topic.name,
-        totalAttempts: progress.total,
-        accuracy,
-        status,
-      });
-    });
-
-    return Array.from(topics.values())
-      .sort((a, b) => b.totalAttempts - a.totalAttempts)
-      .slice(0, 10);
-  }, [userProgress]);
-
-  // Prepare test trend data
   const testTrendData = useMemo(() => {
     return testHistory
       .slice()
       .reverse()
-      .slice(0, 10)
-      .map((test, idx) => ({
-        date: test.completed_at?.split("T")[0] || `Test ${idx}`,
-        score: test.score || 0,
-        maxScore: test.max_score || 100,
-        accuracy: test.total_questions > 0 ? Math.round(((test.correct_answers || 0) / test.total_questions) * 100) : 0,
+      .slice(-12)
+      .map((test, index) => ({
+        label: `T${index + 1}`,
+        date: new Date(test.completed_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        scorePct: test.max_score > 0 ? Math.round((test.score / test.max_score) * 100) : 0,
+        accuracy: test.total_questions > 0 ? Math.round((test.correct_answers / test.total_questions) * 100) : 0,
       }));
   }, [testHistory]);
 
-  // Prepare subject accuracy data
-  const subjectAccuracyData = subjectMetrics.map((m) => ({
-    name: m.subjectName,
-    accuracy: Math.round(m.accuracy),
-    attempts: m.totalAttempts,
+  const subjectAccuracyData = analyticsSummary.subjectMetrics.map((metric) => ({
+    name: metric.subjectName,
+    accuracy: Math.round(metric.accuracy),
+    attempts: metric.totalAnswers,
   }));
 
-  // Prepare weak vs strong topics data
   const topicStatusData = useMemo(() => {
+    const strong = analyticsSummary.topicMetrics.filter((topic) => topic.status === "strong").length;
+    const developing = analyticsSummary.topicMetrics.filter((topic) => topic.status === "developing").length;
+    const weak = analyticsSummary.topicMetrics.filter((topic) => topic.status === "weak").length;
+
     return [
-      {
-        name: "Strong",
-        value: topicMetrics.filter((t) => t.status === "strong").length,
-        color: "#22c55e",
-      },
-      {
-        name: "Developing",
-        value: topicMetrics.filter((t) => t.status === "developing").length,
-        color: "#f59e0b",
-      },
-      {
-        name: "Weak",
-        value: topicMetrics.filter((t) => t.status === "weak").length,
-        color: "#ef4444",
-      },
-    ];
-  }, [topicMetrics]);
+      { name: "Strong", value: strong, color: "#22c55e" },
+      { name: "Developing", value: developing, color: "#f59e0b" },
+      { name: "Needs work", value: weak, color: "#ef4444" },
+    ].filter((item) => item.value > 0);
+  }, [analyticsSummary.topicMetrics]);
 
   useEffect(() => {
-    if (!user || (subjectMetrics.length === 0 && testHistory.length === 0)) {
+    if (!user || (analyticsSummary.questionsAnswered === 0 && testHistory.length === 0)) {
       setAiInsights(null);
       return;
     }
 
-    const totalAnswered = subjectMetrics.reduce((sum, metric) => sum + metric.totalAnswers, 0);
-    const weakTopics = topicMetrics
-      .filter((topic) => topic.status === "weak")
-      .slice(0, 5)
-      .map((topic) => ({
-        name: topic.topicName,
-        accuracy: Math.round(topic.accuracy),
-        attempted: topic.totalAttempts,
-        totalQuestions: topic.totalAttempts,
-      }));
-    const strongTopics = topicMetrics
-      .filter((topic) => topic.status === "strong")
-      .slice(0, 5)
-      .map((topic) => ({
-        name: topic.topicName,
-        accuracy: Math.round(topic.accuracy),
-        attempted: topic.totalAttempts,
-        totalQuestions: topic.totalAttempts,
-      }));
-
-    const loadAiInsights = async () => {
+    const loadInsights = async () => {
       setLoadingInsights(true);
       try {
+        const weakTopics = analyticsSummary.topicMetrics
+          .filter((topic) => topic.status === "weak")
+          .slice(0, 5)
+          .map((topic) => ({
+            name: topic.topicName,
+            accuracy: Math.round(topic.accuracy),
+            attempted: topic.totalAttempts,
+            totalQuestions: topic.totalAttempts,
+          }));
+        const strongTopics = analyticsSummary.topicMetrics
+          .filter((topic) => topic.status === "strong")
+          .slice(0, 5)
+          .map((topic) => ({
+            name: topic.topicName,
+            accuracy: Math.round(topic.accuracy),
+            attempted: topic.totalAttempts,
+            totalQuestions: topic.totalAttempts,
+          }));
+
         const insights = await generateAIInsights({
           studentName: user.user_metadata?.full_name || user.email?.split("@")[0] || "Student",
-          elo: 1400,
+          elo: studentElo,
           tier:
-            testMetrics.answerAccuracy >= 0.8 ? "Advanced" :
-            testMetrics.answerAccuracy >= 0.65 ? "Intermediate" :
-            testMetrics.answerAccuracy >= 0.5 ? "Developing" :
+            overallAccuracy >= 80 ? "Advanced" :
+            overallAccuracy >= 65 ? "Intermediate" :
+            overallAccuracy >= 50 ? "Developing" :
             "Foundation",
-          overallAccuracy: Math.round(testMetrics.answerAccuracy * 100),
-          totalAnswered,
-          streak: 0,
+          overallAccuracy,
+          totalAnswered: analyticsSummary.questionsAnswered,
+          streak: analyticsSummary.currentStreak,
           weakTopics,
           strongTopics,
-          subjectPerformance: subjectMetrics.map((metric) => ({
+          subjectPerformance: analyticsSummary.subjectMetrics.map((metric) => ({
             name: metric.subjectName,
             accuracy: Math.round(metric.accuracy),
             attempted: metric.totalAnswers,
-            totalQuestions: Math.max(metric.totalAnswers, metric.totalAttempts),
+            totalQuestions: metric.totalAnswers,
           })),
           recentTests: testHistory.slice(0, 8).map((test) => ({
             type: test.test_type,
@@ -311,8 +202,8 @@ export default function InsightsPage() {
       }
     };
 
-    void loadAiInsights();
-  }, [subjectMetrics, testHistory, testMetrics.answerAccuracy, topicMetrics, user]);
+    void loadInsights();
+  }, [analyticsSummary, overallAccuracy, studentElo, testHistory, user]);
 
   if (loading) {
     return (
@@ -329,400 +220,286 @@ export default function InsightsPage() {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      <div className="container py-16 space-y-16">
-        {/* Header */}
+      <div className="container py-10 space-y-8">
         <ScrollReveal>
-          <div className="space-y-4 max-w-2xl">
-            <h1 className="text-5xl font-bold bg-gradient-to-r from-foreground via-foreground/80 to-foreground bg-clip-text text-transparent">
-              Learning Insights
-            </h1>
-            <p className="text-lg text-muted-foreground">
-              Comprehensive analytics of your learning journey and test performance across all subjects and topics.
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+              <Sparkles className="h-3.5 w-3.5" />
+              Student insights
+            </div>
+            <h1 className="text-4xl font-bold tracking-tight">Performance and readiness</h1>
+            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+              A deeper view of your saved sessions, topic mastery, warnings, momentum, and practice activity.
             </p>
           </div>
         </ScrollReveal>
 
-        {/* Key Metrics */}
-        <ScrollReveal>
-          <div className="grid md:grid-cols-5 gap-4">
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-xl p-5 space-y-3 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-muted-foreground">Tests Taken</p>
-                <Trophy className="h-5 w-5 text-amber-500" />
-              </div>
-              <p className="text-3xl font-bold text-foreground">{testMetrics.totalTests}</p>
-              <p className="text-xs text-muted-foreground">Cumulative practice</p>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 border border-blue-200/50 dark:border-blue-800/30 rounded-xl p-5 space-y-3 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-muted-foreground">Avg. Accuracy</p>
-                <Target className="h-5 w-5 text-blue-500" />
-              </div>
-              <p className="text-3xl font-bold text-foreground">{Math.round(testMetrics.answerAccuracy * 100)}%</p>
-              <p className="text-xs text-muted-foreground">Answer accuracy rate</p>
-            </div>
-
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border border-green-200/50 dark:border-green-800/30 rounded-xl p-5 space-y-3 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-muted-foreground">Best Score</p>
-                <BarChart3 className="h-5 w-5 text-green-500" />
-              </div>
-              <p className="text-3xl font-bold text-foreground">{testMetrics.bestScore}</p>
-              <p className="text-xs text-muted-foreground">Highest performance</p>
-            </div>
-
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 border border-purple-200/50 dark:border-purple-800/30 rounded-xl p-5 space-y-3 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-muted-foreground">Study Time</p>
-                <Calendar className="h-5 w-5 text-purple-500" />
-              </div>
-              <p className="text-3xl font-bold text-foreground">{Math.round(testMetrics.totalMinutes / 60)}h</p>
-              <p className="text-xs text-muted-foreground">{Math.round(testMetrics.totalMinutes)} minutes</p>
-            </div>
-
-            <div className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/20 dark:to-blue-950/20 border border-indigo-200/50 dark:border-indigo-800/30 rounded-xl p-5 space-y-3 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-muted-foreground">Topics</p>
-                <BookOpen className="h-5 w-5 text-indigo-500" />
-              </div>
-              <p className="text-3xl font-bold text-foreground">{topicMetrics.length}</p>
-              <p className="text-xs text-muted-foreground">Unique topics studied</p>
-            </div>
+        <ScrollReveal delay={30}>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <MetricCard label="Readiness" value={`${analyticsSummary.readinessScore}%`} detail="Blended score from recent accuracy, coverage, and streak" icon={Target} tone="text-blue-500" />
+            <MetricCard label="Streak" value={`${analyticsSummary.currentStreak} days`} detail="Current active-day streak" icon={Flame} tone="text-orange-500" />
+            <MetricCard label="Questions answered" value={analyticsSummary.questionsAnswered.toString()} detail={`${analyticsSummary.correctAnswers} correct answers saved`} icon={BookOpen} tone="text-cyan-500" />
+            <MetricCard label="Active days" value={analyticsSummary.activeDays.toString()} detail="Days with saved history or activity" icon={CalendarDays} tone="text-violet-500" />
+            <MetricCard label="Warnings" value={analyticsSummary.warnings.toString()} detail="Focus and rapid-guess warnings" icon={AlertTriangle} tone="text-amber-500" />
+            <MetricCard label="Violations" value={analyticsSummary.violations.toString()} detail="Saved violation count across attempts" icon={ShieldAlert} tone="text-red-500" />
           </div>
         </ScrollReveal>
 
-        {/* Test Trend Chart */}
-        {testTrendData.length > 0 && (
-          <ScrollReveal>
-            <div className="bg-card border rounded-xl p-8 shadow-sm hover:shadow-md transition-shadow space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                  <TrendingUp className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold">Test Score Trend</h2>
-                  <p className="text-xs text-muted-foreground mt-1">Performance over time</p>
-                </div>
-              </div>
-              <div className="w-full h-72">
-                <RechartsResponsiveContainer width="100%" height="100%">
-                  <RechartsLineChart data={testTrendData}>
-                    <RechartsCartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <RechartsXAxis dataKey="date" stroke="var(--muted-foreground)" />
-                    <RechartsYAxis stroke="var(--muted-foreground)" />
-                    <RechartsTooltip
+        <div className="grid gap-5 xl:grid-cols-2">
+          <ScrollReveal delay={70}>
+            <ChartCard
+              title="Performance trend"
+              description="Recent score and accuracy across your saved attempts."
+              icon={TrendingUp}
+            >
+              {testTrendData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={testTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip
                       contentStyle={{
-                        backgroundColor: "var(--background)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "8px",
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "16px",
                       }}
                     />
-                    <RechartLine type="monotone" dataKey="score" stroke="#8b5cf6" strokeWidth={3} dot={{ fill: "#8b5cf6", r: 5 }} />
-                  </RechartsLineChart>
-                </RechartsResponsiveContainer>
-              </div>
-            </div>
+                    <Legend />
+                    <Line type="monotone" dataKey="scorePct" name="Score %" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="accuracy" name="Accuracy %" stroke="#22c55e" strokeWidth={3} dot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChartState message="Complete a few sessions to unlock your performance trend." />
+              )}
+            </ChartCard>
           </ScrollReveal>
-        )}
 
-        {/* Subject Accuracy - LeetCode Style */}
-        <ScrollReveal>
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400">
-                <Target className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold">Subject Progress</h2>
-                <p className="text-xs text-muted-foreground mt-1">Your accuracy by subject area</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {visibleSubjects.map((subject) => {
-                const metric = subjectMetrics.find((m) => m.subjectId === subject.id);
-                const accuracy = metric?.accuracy || 0;
-                const attempts = metric?.totalAttempts || 0;
-                const getStatusColor = (acc: number) => {
-                  if (acc === 0) return "from-gray-100 to-gray-50 dark:from-gray-900 dark:to-gray-800";
-                  if (acc >= 75) return "from-green-100 to-emerald-50 dark:from-green-900 dark:to-emerald-950";
-                  if (acc >= 60) return "from-blue-100 to-cyan-50 dark:from-blue-900 dark:to-cyan-950";
-                  if (acc >= 45) return "from-amber-100 to-yellow-50 dark:from-amber-900 dark:to-yellow-950";
-                  return "from-red-100 to-orange-50 dark:from-red-900 dark:to-orange-950";
-                };
-                
-                const getAccuracyLabel = (acc: number) => {
-                  if (acc === 0) return "Not started";
-                  if (acc >= 75) return "Excellent";
-                  if (acc >= 60) return "Good";
-                  if (acc >= 45) return "Okay";
-                  return "Needs work";
-                };
+          <ScrollReveal delay={90}>
+            <ChartCard
+              title="Activity timeline"
+              description="Tests, answered questions, and warnings over the last 14 active days."
+              icon={Activity}
+            >
+              {analyticsSummary.activityTimeline.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={analyticsSummary.activityTimeline}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "16px",
+                      }}
+                    />
+                    <Legend />
+                    <Area type="monotone" dataKey="questions" name="Questions" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.2} />
+                    <Area type="monotone" dataKey="tests" name="Tests" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.18} />
+                    <Area type="monotone" dataKey="warnings" name="Warnings" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.14} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChartState message="Your activity timeline will appear once you save a few sessions." />
+              )}
+            </ChartCard>
+          </ScrollReveal>
+        </div>
 
-                return (
-                  <div
-                    key={subject.id}
-                    className={`bg-gradient-to-br ${getStatusColor(accuracy)} border rounded-xl p-5 space-y-3 hover:shadow-md transition-all`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className="font-semibold text-sm text-foreground line-clamp-2">{subject.name}</p>
-                      </div>
-                      {attempts > 0 && (
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/80 dark:bg-black/30 text-xs font-bold text-foreground">
-                          {Math.round(accuracy)}%
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="w-full bg-black/10 dark:bg-white/10 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 h-full transition-all duration-500"
-                          style={{ width: `${accuracy}%` }}
+        <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+          <ScrollReveal delay={110}>
+            <ChartCard
+              title="Subject accuracy"
+              description="Accuracy and attempt volume across subjects."
+              icon={BarChart3}
+            >
+              {subjectAccuracyData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={subjectAccuracyData} layout="vertical" margin={{ left: 20, right: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "16px",
+                      }}
+                    />
+                    <Bar dataKey="accuracy" radius={[0, 10, 10, 0]}>
+                      {subjectAccuracyData.map((entry, index) => (
+                        <Cell
+                          key={`${entry.name}-${index}`}
+                          fill={entry.accuracy >= 75 ? "#22c55e" : entry.accuracy >= 55 ? "#3b82f6" : "#f59e0b"}
                         />
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">{getAccuracyLabel(accuracy)}</span>
-                        <span className="text-muted-foreground font-medium">{attempts} {attempts === 1 ? 'attempt' : 'attempts'}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </ScrollReveal>
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChartState message="Subject analytics will show up once progress is saved." />
+              )}
+            </ChartCard>
+          </ScrollReveal>
 
-        {/* Topics Overview */}
-        <ScrollReveal>
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Skill Level Distribution Pie Chart */}
-            {topicMetrics.length > 0 && (
-              <div className="bg-card border rounded-xl p-8 shadow-sm hover:shadow-md transition-shadow space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
-                    <Zap className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold">Skill Mastery Breakdown</h2>
-                    <p className="text-xs text-muted-foreground mt-1">Topic proficiency distribution</p>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="w-full h-72">
-                    <RechartsResponsiveContainer width="100%" height="100%">
-                      <RechartsPieChart>
-                        <RechartsPie
-                          data={topicStatusData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={100}
-                          label={({ name, value }) => `${name}: ${value}`}
-                        >
-                          {topicStatusData.map((entry, index) => (
-                            <RechartsCell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </RechartsPie>
-                        <RechartsLegend />
-                      </RechartsPieChart>
-                    </RechartsResponsiveContainer>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 pt-2">
-                    <div className="bg-green-50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-800/30 rounded-lg p-3 text-center">
-                      <p className="text-2xl font-bold text-green-600 dark:text-green-400">{topicMetrics.filter((t) => t.status === "strong").length}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Mastered</p>
-                    </div>
-                    <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 rounded-lg p-3 text-center">
-                      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{topicMetrics.filter((t) => t.status === "developing").length}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Developing</p>
-                    </div>
-                    <div className="bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-800/30 rounded-lg p-3 text-center">
-                      <p className="text-2xl font-bold text-red-600 dark:text-red-400">{topicMetrics.filter((t) => t.status === "weak").length}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Needs Work</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Topics to Focus On - Enhanced */}
-            <div className="bg-card border rounded-xl p-8 shadow-sm hover:shadow-md transition-shadow space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400">
-                  <AlertCircle className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold">Focus Areas</h2>
-                  <p className="text-xs text-muted-foreground mt-1">Topics needing your attention</p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {topicMetrics
-                  .filter((t) => t.status === "weak" || t.status === "developing")
-                  .slice(0, 6)
-                  .map((topic) => {
-                    const statusColor = topic.status === "weak" 
-                      ? "bg-red-50/50 dark:bg-red-950/10 border-red-200/30 dark:border-red-800/20" 
-                      : "bg-amber-50/50 dark:bg-amber-950/10 border-amber-200/30 dark:border-amber-800/20";
-                    const progressColor = topic.status === "weak" 
-                      ? "bg-red-500" 
-                      : "bg-amber-500";
-                    
-                    return (
-                      <div key={topic.topicId} className={`${statusColor} border rounded-lg p-4 space-y-2`}>
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold text-foreground line-clamp-2">{topic.topicName}</p>
-                          <span className={`text-xs font-bold px-2 py-1 rounded-full ${topic.status === "weak" ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'}`}>
-                            {Math.round(topic.accuracy)}%
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">{topic.totalAttempts} attempt{topic.totalAttempts !== 1 ? 's' : ''}</p>
-                        <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                          <div
-                            className={progressColor}
-                            style={{ width: `${topic.accuracy}%`, transition: 'width 0.3s ease' }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                {topicMetrics.filter((t) => t.status === "weak" || t.status === "developing").length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-8">No focus areas right now. You are performing great.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </ScrollReveal>
-
-        {/* Strong Topics - Master Level - LeetCode style */}
-        {topicMetrics.filter((t) => t.status === "strong").length > 0 && (
-          <ScrollReveal>
-            <div className="bg-card border rounded-xl p-8 shadow-sm hover:shadow-md transition-shadow space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-green-500/10 text-green-600 dark:text-green-400">
-                  <Trophy className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold">Mastered Topics</h2>
-                  <p className="text-xs text-muted-foreground mt-1">Topics where you've achieved proficiency</p>
-                </div>
-              </div>
-              <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {topicMetrics
-                  .filter((t) => t.status === "strong")
-                  .map((topic) => (
-                    <div 
-                      key={topic.topicId} 
-                      className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/40 dark:to-emerald-950/40 border border-green-200/60 dark:border-green-800/40 rounded-lg p-4 space-y-3 hover:shadow-md transition-all hover:scale-105"
+          <ScrollReveal delay={130}>
+            <ChartCard
+              title="Session mix"
+              description="How your saved practice is distributed."
+              icon={Trophy}
+            >
+              {analyticsSummary.testTypeDistribution.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={analyticsSummary.testTypeDistribution}
+                      dataKey="attempts"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={112}
+                      label={({ name, percent }) => `${name} ${Math.round((percent || 0) * 100)}%`}
                     >
-                      <div className="flex items-start justify-between">
-                        <p className="text-sm font-semibold text-green-900 dark:text-green-100 line-clamp-2">{topic.topicName}</p>
-                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-500 text-white text-xs font-bold flex-shrink-0">
-                          ✓
+                      {analyticsSummary.testTypeDistribution.map((entry, index) => (
+                        <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "16px",
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <EmptyChartState message="Your test-type split will appear once you save practice sessions." />
+              )}
+            </ChartCard>
+          </ScrollReveal>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <ScrollReveal delay={150}>
+            <div className="rounded-[28px] border bg-card/90 p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Focus areas</h2>
+                  <p className="text-sm text-muted-foreground">Topics where extra practice will help fastest.</p>
+                </div>
+              </div>
+              <div className="mt-5 space-y-3">
+                {analyticsSummary.topicMetrics
+                  .filter((topic) => topic.status !== "strong")
+                  .slice(0, 6)
+                  .map((topic) => (
+                    <div key={topic.topicId} className="rounded-2xl border bg-muted/20 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold">{topic.topicName}</p>
+                          <p className="text-xs text-muted-foreground">{topic.subjectName} · {topic.totalAttempts} attempts</p>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${topic.status === "weak" ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
+                          {Math.round(topic.accuracy)}%
                         </span>
                       </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-lg font-bold text-green-700 dark:text-green-300">{Math.round(topic.accuracy)}%</span>
-                        <span className="text-xs text-green-600 dark:text-green-400">accuracy</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
-                        <span>-</span>
-                        <span>{topic.totalAttempts} completed</span>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={topic.status === "weak" ? "h-full bg-destructive" : "h-full bg-warning"}
+                          style={{ width: `${Math.max(topic.accuracy, 4)}%` }}
+                        />
                       </div>
                     </div>
                   ))}
+                {analyticsSummary.topicMetrics.filter((topic) => topic.status !== "strong").length === 0 && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">No immediate weak zones. Your current topic mix looks healthy.</p>
+                )}
               </div>
             </div>
           </ScrollReveal>
-        )}
 
-        {/* AI Insights */}
-        {aiInsights && (
-          <ScrollReveal>
-            <div className="bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50 dark:from-purple-950/30 dark:via-blue-950/30 dark:to-cyan-950/30 border border-purple-200/50 dark:border-purple-800/30 rounded-xl p-8 shadow-sm hover:shadow-md transition-shadow space-y-6">
+          <ScrollReveal delay={170}>
+            <div className="rounded-[28px] border bg-card/90 p-6 shadow-sm">
               <div className="flex items-center gap-3">
-                <div className="h-12 w-12 flex items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-400">
-                  <Brain className="h-6 w-6" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-success/10 text-success">
+                  <Brain className="h-5 w-5" />
                 </div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-semibold text-purple-900 dark:text-purple-100">AI Insights</h2>
-                  <Sparkles className="h-5 w-5 text-purple-500 animate-pulse" />
+                <div>
+                  <h2 className="text-lg font-semibold">AI insights</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {loadingInsights ? "Refreshing study guidance..." : aiInsights?.source === "llm" ? "Fresh coach insights are ready." : "Using built-in guidance from your current history."}
+                  </p>
                 </div>
               </div>
-              {aiInsights.summary && (
-                <div className="rounded-xl border border-purple-200/50 bg-white/70 p-4 text-sm text-slate-700 dark:border-purple-800/30 dark:bg-slate-950/40 dark:text-slate-200">
-                  {aiInsights.summary}
-                </div>
-              )}
-              <div className="grid md:grid-cols-3 gap-6">
-                {aiInsights.strengths && aiInsights.strengths.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-green-900 dark:text-green-100 flex items-center gap-2">
-                      Your Strengths
-                    </h3>
-                    <ul className="space-y-2">
-                      {aiInsights.strengths.map((s, i) => (
-                        <li key={i} className="text-sm text-purple-800 dark:text-purple-200 flex gap-2">
-                          <span className="text-green-600 dark:text-green-400">-</span>
-                          <span>{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {aiInsights.risks && aiInsights.risks.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-orange-900 dark:text-orange-100 flex items-center gap-2">
-                      Areas to Improve
-                    </h3>
-                    <ul className="space-y-2">
-                      {aiInsights.risks.map((a, i) => (
-                        <li key={i} className="text-sm text-purple-800 dark:text-purple-200 flex gap-2">
-                          <span className="text-orange-600 dark:text-orange-400">-</span>
-                          <span>{a}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {aiInsights.recommendations && aiInsights.recommendations.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
-                      Recommendations
-                    </h3>
-                    <ul className="space-y-2">
-                      {aiInsights.recommendations.map((r, i) => (
-                        <li key={i} className="text-sm text-purple-800 dark:text-purple-200 flex gap-2">
-                          <span className="text-blue-600 dark:text-blue-400">-</span>
-                          <span>{r}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+
+              <div className="mt-5 rounded-2xl border border-primary/10 bg-primary/5 p-4 text-sm leading-6 text-muted-foreground">
+                {aiInsights?.summary || "Solve more questions and save a few more tests to unlock richer AI guidance."}
+              </div>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-3">
+                <InsightList title="Strengths" tone="text-success" items={aiInsights?.strengths || []} fallback="Your strongest patterns will appear here." />
+                <InsightList title="Risks" tone="text-warning" items={aiInsights?.risks || []} fallback="No major risks detected yet." />
+                <InsightList title="Recommendations" tone="text-primary" items={aiInsights?.recommendations || []} fallback="Next-step recommendations will appear here." />
               </div>
             </div>
           </ScrollReveal>
+        </div>
+
+        {topicStatusData.length > 0 && (
+          <ScrollReveal delay={190}>
+            <ChartCard
+              title="Mastery distribution"
+              description="A quick split of strong, developing, and weak topics."
+              icon={Target}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={topicStatusData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={110}
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {topicStatusData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Legend />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "16px",
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </ScrollReveal>
         )}
 
-        {/* CTA */}
-        <ScrollReveal>
-          <div className="text-center space-y-4">
-            <p className="text-muted-foreground">Ready to practice more?</p>
-            <div className="flex gap-3 justify-center">
+        <ScrollReveal delay={210}>
+          <div className="text-center space-y-4 pb-6">
+            <p className="text-sm text-muted-foreground">Ready to keep building momentum?</p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
               <Link to="/practice">
                 <Button variant="hero" size="lg" className="gap-2">
                   <BookOpen className="h-4 w-4" />
-                  Start Practice
+                  Start practice
                 </Button>
               </Link>
               <Link to="/history">
                 <Button variant="outline" size="lg">
-                  View History
+                  View history
                 </Button>
               </Link>
             </div>
@@ -731,6 +508,94 @@ export default function InsightsPage() {
       </div>
 
       <Footer />
+    </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: typeof Target;
+  tone: string;
+}) {
+  return (
+    <div className="rounded-[24px] border bg-card/90 p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <Icon className={`h-4 w-4 ${tone}`} />
+      </div>
+      <p className="mt-3 text-3xl font-bold">{value}</p>
+      <p className="mt-2 text-xs leading-5 text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
+function ChartCard({
+  title,
+  description,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  description: string;
+  icon: typeof TrendingUp;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-[28px] border bg-card/90 p-6 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div className="mt-5 h-80">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EmptyChartState({ message }: { message: string }) {
+  return (
+    <div className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
+      {message}
+    </div>
+  );
+}
+
+function InsightList({
+  title,
+  tone,
+  items,
+  fallback,
+}: {
+  title: string;
+  tone: string;
+  items: string[];
+  fallback: string;
+}) {
+  return (
+    <div className="rounded-2xl border bg-muted/10 p-4">
+      <p className={`text-sm font-semibold ${tone}`}>{title}</p>
+      <div className="mt-3 space-y-2">
+        {items.slice(0, 3).map((item) => (
+          <p key={item} className="text-sm leading-6 text-muted-foreground">{item}</p>
+        ))}
+        {items.length === 0 && (
+          <p className="text-sm leading-6 text-muted-foreground">{fallback}</p>
+        )}
+      </div>
     </div>
   );
 }

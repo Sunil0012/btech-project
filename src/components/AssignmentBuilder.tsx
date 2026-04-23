@@ -10,7 +10,6 @@ import { pickAssignmentQuestions } from "@/lib/classroom";
 import { createAssignmentForCourse } from "@/lib/classroomData";
 import {
   serializeAssignmentContent,
-  type AssignmentAttachment,
   type AssignmentManualQuestion,
 } from "@/lib/assignmentContent";
 import {
@@ -19,7 +18,9 @@ import {
   type CustomQuestionBankQuestion,
 } from "@/lib/customQuestionBank";
 import { generateTemplatedQuestionVariants } from "@/lib/questionTemplates";
+import { uploadAssignmentFile, type AssignmentFileMetadata } from "@/lib/assignmentFileUpload";
 import { toast } from "@/hooks/use-toast";
+import { teacherSupabase } from "@/integrations/supabase/teacher-client";
 
 interface AssignmentBuilderProps {
   courses: CourseSummary[];
@@ -79,7 +80,8 @@ function inferAssignmentDifficulty(questionList: AssignmentManualQuestion[]) {
 }
 
 export function AssignmentBuilder({ courses, defaultCourseId, onCreated }: AssignmentBuilderProps) {
-  const [attachments, setAttachments] = useState<AssignmentAttachment[]>([]);
+  const [attachments, setAttachments] = useState<(File & { id?: string })[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const [customQuestionBank, setCustomQuestionBank] = useState<CustomQuestionBankQuestion[]>([]);
   const [courseId, setCourseId] = useState(defaultCourseId || courses[0]?.id || "");
   const [title, setTitle] = useState("");
@@ -149,7 +151,7 @@ export function AssignmentBuilder({ courses, defaultCourseId, onCreated }: Assig
     }
   }, [templateCandidates, templateSeedId]);
 
-  const handleFilesSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFilesSelected = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
@@ -157,31 +159,14 @@ export function AssignmentBuilder({ courses, defaultCourseId, onCreated }: Assig
     if (tooLarge) {
       toast({
         title: "File too large",
-        description: `${tooLarge.name} is larger than 1.5 MB. Keep uploads small for now.`,
+        description: `${tooLarge.name} is larger than 1.5 MB.`,
         variant: "destructive",
       });
       event.target.value = "";
       return;
     }
 
-    const nextFiles = await Promise.all(
-      files.slice(0, Math.max(0, 3 - attachments.length)).map(
-        (file) =>
-          new Promise<AssignmentAttachment>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () =>
-              resolve({
-                name: file.name,
-                type: file.type || "application/octet-stream",
-                size: file.size,
-                dataUrl: String(reader.result || ""),
-              });
-            reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
-            reader.readAsDataURL(file);
-          })
-      )
-    );
-
+    const nextFiles = files.slice(0, Math.max(0, 3 - attachments.length));
     setAttachments((previous) => [...previous, ...nextFiles].slice(0, 3));
     event.target.value = "";
   };
@@ -369,12 +354,13 @@ export function AssignmentBuilder({ courses, defaultCourseId, onCreated }: Assig
           ? undefined
           : topicId || undefined;
 
-      await createAssignmentForCourse({
+      // Create assignment WITHOUT embedded files (to keep description small)
+      const assignment = await createAssignmentForCourse({
         courseId,
         title: title.trim(),
         description: serializeAssignmentContent({
           body: description,
-          attachments,
+          attachments: [], // Don't embed files in description
           manualQuestions: questionSource === "manual-quiz" ? manualQuestions : [],
           questionSource,
         }),
@@ -387,6 +373,36 @@ export function AssignmentBuilder({ courses, defaultCourseId, onCreated }: Assig
         dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
         questionIds: finalQuestionIds,
       });
+
+      // Upload files to the assignment_files table
+      if (attachments.length > 0 && assignment.id) {
+        setUploadingFiles(true);
+        const { data: authData } = await teacherSupabase.auth.getUser();
+        const userId = authData.user?.id;
+
+        if (!userId) {
+          throw new Error("Could not determine user ID for file upload");
+        }
+
+        const uploadErrors: string[] = [];
+        for (const file of attachments) {
+          try {
+            await uploadAssignmentFile(assignment.id, file, userId);
+          } catch (error) {
+            uploadErrors.push(error instanceof Error ? error.message : `Failed to upload ${file.name}`);
+          }
+        }
+
+        if (uploadErrors.length > 0) {
+          console.warn("Some files failed to upload:", uploadErrors);
+          toast({
+            title: "Some files failed to upload",
+            description: uploadErrors.slice(0, 2).join(", "),
+            variant: "destructive",
+          });
+        }
+        setUploadingFiles(false);
+      }
 
       toast({
         title: questionSource === "manual-quiz" ? "Quiz published" : "Assignment created",
@@ -414,6 +430,7 @@ export function AssignmentBuilder({ courses, defaultCourseId, onCreated }: Assig
       });
     } finally {
       setCreating(false);
+      setUploadingFiles(false);
     }
   };
 
@@ -970,8 +987,8 @@ export function AssignmentBuilder({ courses, defaultCourseId, onCreated }: Assig
             </>
           )}
 
-          <Button variant="hero" className="w-full gap-2" onClick={() => void handleCreate()} disabled={creating || courses.length === 0}>
-            {creating ? "Creating..." : questionSource === "manual-quiz" ? "Publish quiz" : "Create assignment"}
+          <Button variant="hero" className="w-full gap-2" onClick={() => void handleCreate()} disabled={creating || uploadingFiles || courses.length === 0}>
+            {creating || uploadingFiles ? "Creating..." : questionSource === "manual-quiz" ? "Publish quiz" : "Create assignment"}
           </Button>
         </div>
       </div>

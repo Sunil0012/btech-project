@@ -51,6 +51,10 @@ const fullTestIds: FullTestId[] = [
   "full-gate",
   "mock-paper-2",
   "mock-paper-3",
+  "mock-paper-4",
+  "mock-paper-5",
+  "mock-paper-6",
+  "mock-paper-7",
   "da-2024-s1",
   "da-2025",
   "da-2026",
@@ -180,6 +184,20 @@ function parsePracticeAnswer(value: unknown): PracticeAnswer {
   return null;
 }
 
+function parseReviewPayloadSource(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parseReviewPayloadSource(parsed);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
 function parseObjectRecord(value: unknown): Record<string, any> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   return value as Record<string, any>;
@@ -199,14 +217,21 @@ function buildSyntheticQuestionReview(question: Question, answer: PracticeAnswer
 }
 
 export function parseTestReviewPayload(value: unknown): TestReviewPayload | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const payload = parseReviewPayloadSource(value);
+  if (!payload) return null;
 
-  const payload = value as Record<string, unknown>;
-  const questionIds = Array.isArray(payload.question_ids)
-    ? payload.question_ids.filter((item): item is string => typeof item === "string")
+  const rawQuestionIds = payload.question_ids ?? payload.questionIds;
+  const rawQuestionSnapshots =
+    payload.question_snapshots ?? payload.questionSnapshots ?? payload.questions_snapshot ?? payload.questionsSnapshot;
+  const rawQuestionReviews = payload.question_reviews ?? payload.questionReviews;
+  const rawWarningBreakdown = payload.warningBreakdown ?? payload.warning_breakdown;
+  const rawReviewMetadata = payload.reviewMetadata ?? payload.review_metadata;
+
+  const questionIds = Array.isArray(rawQuestionIds)
+    ? rawQuestionIds.filter((item): item is string => typeof item === "string")
     : [];
-  const questionSnapshots = Array.isArray(payload.question_snapshots)
-    ? payload.question_snapshots
+  const questionSnapshots = Array.isArray(rawQuestionSnapshots)
+    ? rawQuestionSnapshots
         .map((item) => coerceReviewQuestionSnapshot(item))
         .filter((item): item is ReviewQuestionSnapshot => Boolean(item))
     : [];
@@ -214,20 +239,40 @@ export function parseTestReviewPayload(value: unknown): TestReviewPayload | null
   if (questionIds.length === 0 && questionSnapshots.length === 0) return null;
 
   return {
-    full_test_id: typeof payload.full_test_id === "string" ? payload.full_test_id : null,
+    full_test_id:
+      typeof payload.full_test_id === "string"
+        ? payload.full_test_id
+        : typeof payload.fullTestId === "string"
+          ? payload.fullTestId
+          : null,
     question_ids: questionIds.length > 0 ? questionIds : questionSnapshots.map((snapshot) => snapshot.id),
     answers: Array.isArray(payload.answers) ? payload.answers.map((item) => parsePracticeAnswer(item)) : [],
     question_snapshots: questionSnapshots,
-    question_reviews: Array.isArray(payload.question_reviews)
-      ? payload.question_reviews
+    question_reviews: Array.isArray(rawQuestionReviews)
+      ? rawQuestionReviews
           .map((item) => coerceQuestionSessionReviewPayload(item))
           .filter((item): item is QuestionSessionReviewPayload => Boolean(item))
       : [],
-    attemptKind: typeof payload.attemptKind === "string" ? payload.attemptKind : undefined,
-    countsForStats: typeof payload.countsForStats === "boolean" ? payload.countsForStats : undefined,
-    countsForRating: typeof payload.countsForRating === "boolean" ? payload.countsForRating : undefined,
-    warningBreakdown: parseObjectRecord(payload.warningBreakdown),
-    reviewMetadata: parseObjectRecord(payload.reviewMetadata),
+    attemptKind:
+      typeof payload.attemptKind === "string"
+        ? payload.attemptKind
+        : typeof payload.attempt_kind === "string"
+          ? payload.attempt_kind
+          : undefined,
+    countsForStats:
+      typeof payload.countsForStats === "boolean"
+        ? payload.countsForStats
+        : typeof payload.counts_for_stats === "boolean"
+          ? payload.counts_for_stats
+          : undefined,
+    countsForRating:
+      typeof payload.countsForRating === "boolean"
+        ? payload.countsForRating
+        : typeof payload.counts_for_rating === "boolean"
+          ? payload.counts_for_rating
+          : undefined,
+    warningBreakdown: parseObjectRecord(rawWarningBreakdown),
+    reviewMetadata: parseObjectRecord(rawReviewMetadata),
   };
 }
 

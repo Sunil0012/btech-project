@@ -13,6 +13,9 @@ async function main() {
 
   const entrySource = `
     import { questions } from "./src/data/questions.ts";
+    import { subjects } from "./src/data/subjects.ts";
+    import { adaptiveQuestions } from "./src/data/adaptiveTest.ts";
+    import { adaptiveMixQuestions } from "./src/data/adaptiveMixTest.ts";
     import { availableFullTests, getFullTestQuestions } from "./src/data/fullTests.ts";
 
     const tests = availableFullTests.map((meta) => ({
@@ -22,7 +25,10 @@ async function main() {
 
     export default {
       generatedAt: new Date().toISOString(),
+      subjects,
       questions,
+      adaptiveQuestions,
+      adaptiveMixQuestions,
       tests,
     };
   `;

@@ -8,12 +8,16 @@ import { TeacherWorkspaceHeader } from "@/components/teacher/TeacherWorkspaceHea
 import { Input } from "@/components/ui/input";
 import { useTeacherWorkspace } from "@/hooks/useTeacherWorkspace";
 import { buildTeacherStudentSummaries, type TeacherStudentSummary } from "@/lib/teacherAnalytics";
+import { removeStudentFromCourseForSignedInTeacher } from "@/lib/classroomData";
+import { toast } from "@/hooks/use-toast";
 
 function TeacherStudentsPage() {
-  const { workspace, loading } = useTeacherWorkspace();
+  const { workspace, loading, refresh } = useTeacherWorkspace();
   const [selectedStudent, setSelectedStudent] = useState<TeacherStudentSummary | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [removingStudentId, setRemovingStudentId] = useState<string | null>(null);
+  const [forceRefreshCounter, setForceRefreshCounter] = useState(0);
 
   const students = useMemo(
     () =>
@@ -28,7 +32,7 @@ function TeacherStudentsPage() {
         const rightScore = right.accuracy + right.completionRate;
         return leftScore - rightScore;
       }),
-    [workspace.assignments, workspace.enrollments, workspace.progressRows, workspace.students, workspace.submissions]
+    [workspace.assignments, workspace.enrollments, workspace.progressRows, workspace.students, workspace.submissions, forceRefreshCounter]
   );
 
   const filteredStudents = useMemo(() => {
@@ -50,6 +54,64 @@ function TeacherStudentsPage() {
       return searchable.includes(normalizedQuery);
     });
   }, [riskFilter, searchQuery, students]);
+
+  const handleRemoveStudent = async (student: TeacherStudentSummary) => {
+    if (student.courseTitles.length === 0) {
+      toast({
+        title: "No courses to remove from",
+        description: `${student.name} is not enrolled in any courses.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remove ${student.name} from all ${student.courseTitles.length} course(s)?\n\nCourses: ${student.courseTitles.join(", ")}\n\nThis will also clear their submissions for these courses.`
+    );
+    if (!confirmed) return;
+
+    setRemovingStudentId(student.userId);
+    try {
+      // Get the course IDs for the courses this student is enrolled in
+      const enrolledCourses = workspace.enrollments
+        .filter((enrollment) => enrollment.student_id === student.userId)
+        .map((enrollment) => enrollment.course_id);
+
+      // Remove student from each course
+      for (const courseId of enrolledCourses) {
+        await removeStudentFromCourseForSignedInTeacher({
+          courseId,
+          studentId: student.userId,
+        });
+      }
+
+      if (selectedStudent?.userId === student.userId) {
+        setSelectedStudent(null);
+      }
+
+      // Wait for database persistence
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      // Increment counter to force students list recomputation
+      setForceRefreshCounter((prev) => prev + 1);
+
+      // Full refresh to sync data with backend
+      await refresh?.();
+
+      toast({
+        title: "Student removed",
+        description: `${student.name} has been removed from all ${enrolledCourses.length} course(s).`,
+      });
+    } catch (error) {
+      toast({
+        title: "Could not remove student",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setRemovingStudentId(null);
+    }
+  };
 
   const atRiskCount = students.filter((student) => student.riskLevel === "high").length;
   const mediumRiskCount = students.filter((student) => student.riskLevel === "medium").length;
@@ -201,7 +263,12 @@ function TeacherStudentsPage() {
             </div>
           </section>
 
-          <TeacherRosterTable students={filteredStudents} onSelectStudent={setSelectedStudent} />
+          <TeacherRosterTable 
+            students={filteredStudents} 
+            onSelectStudent={setSelectedStudent}
+            onRemoveStudent={handleRemoveStudent}
+            removingStudentId={removingStudentId}
+          />
 
           <TeacherStudentProfileDialog
             student={selectedStudent}
@@ -213,6 +280,9 @@ function TeacherStudentsPage() {
             submissions={workspace.submissions}
             open={Boolean(selectedStudent)}
             onOpenChange={(open) => !open && setSelectedStudent(null)}
+            onDelete={async () => {
+              await refresh?.();
+            }}
           />
         </div>
       )}

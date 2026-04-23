@@ -439,7 +439,15 @@ export default function PracticePage() {
 // GATE-Style Full Mock Test
 // ============================================================
 function GateStyleMockTest({ testId }: { testId: FullTestId }) {
-  const { user, answeredQuestions, addAnsweredQuestion, updateSubjectScore, recordTestHistory } = useStudentAuth();
+  const {
+    user,
+    answeredQuestions,
+    addAnsweredQuestion,
+    updateSubjectScore,
+    recordTestHistory,
+    studentElo,
+    setStudentElo,
+  } = useStudentAuth();
   const fullTestMeta = getFullTestMeta(testId);
   const [questions] = useState(() => {
     if (testId === "full-gate") return getFullMockQuestions(answeredQuestions);
@@ -632,6 +640,7 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
     let maxMarks = 0;
     let correctCount = 0;
     let attemptedCount = 0;
+    let nextElo = studentElo;
 
     questions.forEach((q, i) => {
       const correct = isCorrect(i);
@@ -641,17 +650,22 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
       if (correct) {
         totalMarks += q.marks;
         correctCount += 1;
+        nextElo = updateElo(nextElo, q.eloRating || 1500, true);
       } else if (answered && q.type === "mcq") {
         totalMarks -= q.negativeMarks;
       }
 
-      if (answered) attemptedCount += 1;
+        if (answered) {
+          attemptedCount += 1;
+          addAnsweredQuestion(q.id, correct);
+          updateSubjectScore(q.subjectId, correct, q.topicId);
+        }
+      });
 
-      addAnsweredQuestion(q.id, correct);
-      updateSubjectScore(q.subjectId, correct);
-    });
+    setStudentElo(nextElo);
 
     if (finalRiskFinish) totalMarks = Math.max(0, totalMarks - 5);
+    const attemptDurationSeconds = Math.max(fullTestMeta.durationMinutes * 60 - timeLeft, 0);
 
     const testReviewPayload = buildTestReviewPayload({
       questions,
@@ -661,6 +675,10 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
       countsForStats: true,
       countsForRating: true,
       warningBreakdown: { violations: finalViolations, testType: "full-mock" },
+      reviewMetadata: {
+        attemptDuration: attemptDurationSeconds,
+        testType: "full-mock",
+      },
     });
 
     void recordTestHistory({
@@ -673,7 +691,7 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
       correct_answers: correctCount,
       total_questions: questions.length,
       violations: finalViolations,
-      duration_seconds: fullTestMeta.durationMinutes * 60 - timeLeft,
+      duration_seconds: attemptDurationSeconds,
       review_payload: testReviewPayload,
     });
 
@@ -682,7 +700,20 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
     }
     setWarningOpen(false);
     setFinished(true);
-  }, [addAnsweredQuestion, fullTestMeta.durationMinutes, isAnswered, isCorrect, questions, recordTestHistory, riskFinish, timeLeft, updateSubjectScore, violations]);
+  }, [
+    addAnsweredQuestion,
+    fullTestMeta.durationMinutes,
+    isAnswered,
+    isCorrect,
+    questions,
+    recordTestHistory,
+    riskFinish,
+    setStudentElo,
+    studentElo,
+    timeLeft,
+    updateSubjectScore,
+    violations,
+  ]);
 
   useEffect(() => {
     if (!examStarted || finished || violations < 3) return;

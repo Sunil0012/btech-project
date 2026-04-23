@@ -70,6 +70,37 @@ function getTypeTone(testType: string) {
   return "bg-accent/10 text-accent";
 }
 
+function formatScoreValue(value: number | null | undefined) {
+  return Number(value ?? 0).toFixed(2);
+}
+
+function getDurationSecondsFromHistoryRow(
+  row: Pick<StudentTables<"test_history">, "duration_seconds" | "review_payload">
+) {
+  if (typeof row.duration_seconds === "number" && row.duration_seconds >= 0) {
+    return row.duration_seconds;
+  }
+
+  const reviewPayload = parseTestReviewPayload(row.review_payload);
+  const attemptDuration = reviewPayload?.reviewMetadata?.attemptDuration;
+  return typeof attemptDuration === "number" && attemptDuration >= 0 ? attemptDuration : null;
+}
+
+function formatHistoryDuration(row: Pick<StudentTables<"test_history">, "duration_seconds" | "review_payload">) {
+  const totalSeconds = getDurationSecondsFromHistoryRow(row);
+  if (typeof totalSeconds !== "number") return "Untimed";
+  if (totalSeconds < 60) return `${Math.max(1, Math.round(totalSeconds))} sec`;
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  return `${Math.max(1, minutes)} min`;
+}
+
 export default function TestHistoryPage() {
   const { user } = useStudentAuth();
   const [historyRows, setHistoryRows] = useState<StudentTables<"test_history">[]>([]);
@@ -223,10 +254,11 @@ export default function TestHistoryPage() {
                 const accuracy = row.total_questions > 0
                   ? Math.round((row.correct_answers / row.total_questions) * 100)
                   : 0;
-                const durationText = (row.duration_seconds && row.duration_seconds > 0)
-                  ? `${Math.max(1, Math.round(row.duration_seconds / 60))} min`
-                  : "Untimed";
                 const reviewPayload = parseTestReviewPayload(row.review_payload);
+                const durationText = formatHistoryDuration({
+                  duration_seconds: row.duration_seconds,
+                  review_payload: reviewPayload ?? row.review_payload,
+                });
                 const warningSummary = summarizeTestWarnings(reviewPayload, row.violations ?? 0);
 
                 return (
@@ -246,7 +278,10 @@ export default function TestHistoryPage() {
                           </p>
                         </div>
                         <div className="grid gap-3 sm:grid-cols-3">
-                          <MiniStat label="Score" value={`${row.score}/${row.max_score}`} />
+                          <MiniStat
+                            label="Score"
+                            value={`${formatScoreValue(row.score)}/${formatScoreValue(row.max_score)}`}
+                          />
                           <MiniStat label="Accuracy" value={`${accuracy}%`} />
                           <MiniStat label="Duration" value={durationText} />
                         </div>

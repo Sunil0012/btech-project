@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download
 import { Button } from "@/components/ui/button";
 import { useStudentAuth } from "@/contexts/AuthContext";
 import { parseAssignmentDescription } from "@/lib/assignmentContent";
+import { fetchAssignmentFiles, downloadAssignmentFile } from "@/lib/assignmentFileUpload";
 import { logStudentActivityEvent } from "@/lib/activityEvents";
 import { getStudentAssignmentAttempt, submitAssignmentResult } from "@/lib/teacherSync";
 import { buildTestReviewPayload } from "@/lib/testReview";
@@ -33,6 +34,7 @@ function AssignmentAttemptPage() {
   const [loading, setLoading] = useState(true);
   const [assignment, setAssignment] = useState<Awaited<ReturnType<typeof getStudentAssignmentAttempt>>["assignment"]>(null);
   const [existingSubmission, setExistingSubmission] = useState<Awaited<ReturnType<typeof getStudentAssignmentAttempt>>["submission"]>(null);
+  const [assignmentFiles, setAssignmentFiles] = useState<Array<{ id: string; file_name: string; file_size: number; file_type: string }>>([]);
   const [answers, setAnswers] = useState<Record<string, AssignmentAnswerValue>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [visitedQuestions, setVisitedQuestions] = useState<Set<string>>(new Set());
@@ -43,6 +45,7 @@ function AssignmentAttemptPage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [violations, setViolations] = useState(0);
   const [warning, setWarning] = useState("");
+  const [selectedQuestionCount, setSelectedQuestionCount] = useState<number | null>(null);
   const assignmentRef = useRef<Awaited<ReturnType<typeof getStudentAssignmentAttempt>>["assignment"]>(null);
   const answersRef = useRef<Record<string, AssignmentAnswerValue>>({});
   const questionsRef = useRef<ReturnType<typeof getQuestionsByAssignment>>([]);
@@ -92,9 +95,31 @@ function AssignmentAttemptPage() {
       .finally(() => setLoading(false));
   }, [assignmentId, user]);
 
+  // Fetch assignment files
+  useEffect(() => {
+    if (!assignment?.id) return;
+
+    void fetchAssignmentFiles(assignment.id).then((files) => {
+      setAssignmentFiles(
+        files.map((file: any) => ({
+          id: file.id,
+          file_name: file.file_name,
+          file_size: file.file_size,
+          file_type: file.file_type,
+        }))
+      );
+    });
+  }, [assignment?.id]);
+
   const questions = useMemo(() => (assignment ? getQuestionsByAssignment(assignment) : []), [assignment]);
-  const currentQuestion = questions[currentIndex];
-  const gradedResult = useMemo(() => gradeAssignment(questions, answers), [answers, questions]);
+  const filteredQuestions = useMemo(() => {
+    if (selectedQuestionCount === null || !assignmentContent?.manualQuestions.length) {
+      return questions;
+    }
+    return questions.slice(0, selectedQuestionCount);
+  }, [questions, selectedQuestionCount, assignmentContent?.manualQuestions.length]);
+  const currentQuestion = filteredQuestions[currentIndex];
+  const gradedResult = useMemo(() => gradeAssignment(filteredQuestions, answers), [answers, filteredQuestions]);
   const assignmentContent = useMemo(() => parseAssignmentDescription(assignment?.description), [assignment?.description]);
 
   useEffect(() => {
@@ -106,8 +131,8 @@ function AssignmentAttemptPage() {
   }, [answers]);
 
   useEffect(() => {
-    questionsRef.current = questions;
-  }, [questions]);
+    questionsRef.current = filteredQuestions;
+  }, [filteredQuestions]);
 
   useEffect(() => {
     timeLeftRef.current = timeLeft;
@@ -157,9 +182,12 @@ function AssignmentAttemptPage() {
         
         currentQuestions.forEach((question) => {
           const correct = isQuestionCorrect(question, currentAnswers[question.id] ?? null);
+          const answered = isQuestionAnswered(question, currentAnswers[question.id] ?? null);
           answerObjects.push(currentAnswers[question.id] ?? null);
-          addAnsweredQuestion(question.id, correct);
-          updateSubjectScore(question.subjectId, correct);
+          if (answered) {
+            addAnsweredQuestion(question.id, correct);
+            updateSubjectScore(question.subjectId, correct, question.topicId);
+          }
           nextElo = updateElo(nextElo, question.eloRating, correct);
         });
         setStudentElo(nextElo);
@@ -232,14 +260,14 @@ function AssignmentAttemptPage() {
   );
 
   useEffect(() => {
-    if (!started || finished || existingSubmission || questions.length === 0) return;
+    if (!started || finished || existingSubmission || filteredQuestions.length === 0) return;
 
     setVisitedQuestions((previous) => {
       const next = new Set(previous);
-      next.add(questions[currentIndex].id);
+      next.add(filteredQuestions[currentIndex].id);
       return next;
     });
-  }, [currentIndex, existingSubmission, finished, questions, started]);
+  }, [currentIndex, existingSubmission, finished, filteredQuestions, started]);
 
   useEffect(() => {
     if (!started || finished || existingSubmission) return;
@@ -389,7 +417,7 @@ function AssignmentAttemptPage() {
           </div>
 
           <div className="space-y-4">
-            {questions.map((question, index) => {
+            {filteredQuestions.map((question, index) => {
               const answer = answers[question.id] ?? null;
               const correct = isQuestionCorrect(question, answer);
               return (
@@ -485,18 +513,17 @@ function AssignmentAttemptPage() {
             <p className="mt-3 text-muted-foreground">
               {assignmentContent.body || "Complete the assignment within the timer and submit for instant grading."}
             </p>
-            {assignmentContent.attachments.length > 0 && (
+            {assignmentFiles.length > 0 && (
               <div className="mt-5 flex flex-wrap gap-2">
-                {assignmentContent.attachments.map((file) => (
-                  <a
-                    key={`${assignment.id}-${file.name}`}
-                    href={file.dataUrl}
-                    download={file.name}
+                {assignmentFiles.map((file) => (
+                  <button
+                    key={file.id}
+                    onClick={() => downloadAssignmentFile(file.id, file.file_name)}
                     className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
                   >
                     <Download className="h-4 w-4 text-primary" />
-                    {file.name}
-                  </a>
+                    {file.file_name}
+                  </button>
                 ))}
               </div>
             )}
@@ -506,9 +533,50 @@ function AssignmentAttemptPage() {
               <SummaryCard label="Type" value={assignment.type} />
               <SummaryCard label="Warnings" value="3 max" />
             </div>
-            <Button variant="hero" className="mt-6" onClick={() => setStarted(true)}>
+            <Button 
+              variant="hero" 
+              className="mt-6" 
+              onClick={() => {
+                if (assignmentContent?.questionSource === "manual-quiz" && selectedQuestionCount === null) {
+                  // Show question count selector for manual quizzes
+                  return;
+                }
+                setStarted(true);
+              }}
+            >
               Start assignment
             </Button>
+            {assignmentContent?.questionSource === "manual-quiz" && selectedQuestionCount === null && (
+              <div className="mt-6 rounded-[2rem] border border-primary/20 bg-primary/5 p-6">
+                <h3 className="text-lg font-semibold mb-4">How many questions would you like to attempt?</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  This quiz has {questions.length} questions available. You can choose to attempt all of them or a subset.
+                </p>
+                <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 mb-4">
+                  {[5, 10, 15, 20, 25, 30].filter(count => count <= questions.length).map((count) => (
+                    <button
+                      key={count}
+                      onClick={() => {
+                        setSelectedQuestionCount(count);
+                        setStarted(true);
+                      }}
+                      className="rounded-xl border-2 border-primary/20 bg-background px-4 py-3 text-sm font-medium hover:border-primary hover:bg-primary/5 transition-colors"
+                    >
+                      {count} questions
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setSelectedQuestionCount(questions.length);
+                      setStarted(true);
+                    }}
+                    className="rounded-xl border-2 border-primary bg-primary/10 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/20 transition-colors"
+                  >
+                    All {questions.length}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -518,7 +586,7 @@ function AssignmentAttemptPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-                    Question {currentIndex + 1} of {questions.length}
+                    Question {currentIndex + 1} of {filteredQuestions.length}
                   </p>
                   <h2 className="mt-2 text-xl font-semibold capitalize">{currentQuestion?.difficulty} question</h2>
                 </div>
@@ -620,7 +688,7 @@ function AssignmentAttemptPage() {
             <aside className="rounded-[2rem] border border-border/70 bg-card/95 p-5 shadow-sm">
               <h3 className="text-lg font-semibold">Question Palette</h3>
               <div className="mt-4 grid grid-cols-5 gap-2">
-                {questions.map((question, index) => {
+                {filteredQuestions.map((question, index) => {
                   const status = getStatus(question.id);
                   const marked = markedQuestions.has(question.id);
                   return (

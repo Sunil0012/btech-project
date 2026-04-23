@@ -1322,6 +1322,184 @@ Assume a student with:
 \textbf{Recommendation:}
 "Good progress. Expected GATE score: 76--86 (best estimate: 78). Consistency is strong across topics. Recent acceleration (+7\%) is encouraging---maintain this pace by continuing daily practice on weak areas."
 
+\section{Deployment and Network Configuration}
+
+\subsection{Supabase Configuration and Setup}
+
+The \project{} platform relies on Supabase as its backend infrastructure. The configuration is managed through environment variables defined in the \tech{.env} file:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.35\columnwidth} >{\raggedright\arraybackslash}p{0.6\columnwidth}}
+\toprule
+\textbf{Environment Variable} & \textbf{Purpose} \\
+\midrule
+VITE\_STUDENT\_SUPABASE\_PROJECT\_ID & Project identifier for student-facing services \\
+VITE\_STUDENT\_SUPABASE\_URL & REST API endpoint for student data access \\
+VITE\_STUDENT\_SUPABASE\_PUBLISHABLE\_KEY & Public API key for unauthenticated operations \\
+VITE\_TEACHER\_SUPABASE\_PROJECT\_ID & Project identifier for teacher-facing services \\
+VITE\_TEACHER\_SUPABASE\_URL & REST API endpoint for teacher/classroom data \\
+VITE\_TEACHER\_SUPABASE\_PUBLISHABLE\_KEY & Public API key for teacher operations \\
+VITE\_TEACHER\_SUPABASE\_SCHEMA & Database schema targeting (default: public) \\
+\bottomrule
+\end{tabular}
+\caption{Environment variables for Supabase connectivity.}
+\end{table}
+
+\subsection{Network Connectivity Troubleshooting}
+
+\subsubsection{Common Connection Issues}
+
+The platform implements robust error handling for common network scenarios:
+
+\begin{enumerate}
+\item \textbf{Connection Reset Errors}: When Supabase server forcibly closes connections (error 10054 on Windows), typically due to:
+   \begin{itemize}
+   \item Network firewall or proxy blocking HTTPS traffic.
+   \item Supabase service experiencing temporary outages.
+   \item Invalid or expired project credentials.
+   \item Regional connectivity issues (attempting to reach a geographically distant server).
+   \end{itemize}
+
+\item \textbf{Timeout Errors}: Requests exceed response time limits (default 10-15 seconds), indicating:
+   \begin{itemize}
+   \item Slow network connection or high latency.
+   \item Supabase server overload or degradation.
+   \item Large query result sets causing serialization delays.
+   \end{itemize}
+
+\item \textbf{Unauthorized (401) Errors}: API key is invalid or RLS policies deny access:
+   \begin{itemize}
+   \item Public key has insufficient permissions for queried tables.
+   \item Row-Level Security (RLS) policies require JWT authentication.
+   \item User session token has expired.
+   \end{itemize}
+
+\item \textbf{Not Found (404) Errors}: Queried table or endpoint does not exist:
+   \begin{itemize}
+   \item Supabase schema migration incomplete.
+   \item Table name mismatch between code and database.
+   \item API endpoint version mismatch.
+   \end{itemize}
+\end{enumerate}
+
+\subsubsection{Diagnostic and Recovery Procedures}
+
+The \tech{STUDENT\_PROGRESS\_TRACKER.ipynb} notebook includes a comprehensive diagnostic cell that:
+
+\begin{enumerate}
+\item Verifies environment variables are correctly loaded from \tech{.env}.
+\item Tests connectivity with a simple query (limit=1) to detect basic connectivity issues.
+\item Logs detailed request/response information for debugging.
+\item Categorizes errors into actionable resolution steps.
+\end{enumerate}
+
+\textbf{Diagnostic Checklist}:
+
+\begin{verbatim}
+1. ✅ Environment Variables Loaded
+   - Check VITE_STUDENT_SUPABASE_URL is not empty
+   - Verify VITE_STUDENT_SUPABASE_PUBLISHABLE_KEY is valid (>20 chars)
+   
+2. 📡 Network Connectivity
+   - Verify internet connection is active
+   - Check firewall/proxy is not blocking *.supabase.co domains
+   - Try alternate DNS (e.g., 8.8.8.8)
+   
+3. 🔑 Authentication
+   - Confirm API key corresponds to correct Supabase project
+   - Verify project URL matches: https://[PROJECT_ID].supabase.co
+   - Check RLS policies allow public key access to tables
+   
+4. 📊 Database Readiness
+   - Verify all required tables exist in database
+   - Confirm schema migrations have completed
+   - Test with curl/Postman before running Python notebook
+\end{verbatim}
+
+\subsubsection{Connection Resilience Strategy}
+
+The fetch functions implement exponential backoff retry logic:
+
+\begin{equation}
+\text{wait\_time} = \text{base\_delay} \times (1 + \text{jitter})^{\text{attempt\_number}}
+\end{equation}
+
+where:
+\begin{itemize}
+\item $\text{base\_delay}$ = 1 second (initial retry delay).
+\item $\text{jitter} \in [0, 1)$ = random jitter to avoid thundering herd.
+\item $\text{attempt\_number} \in [0, 2]$ = retry count (3 total attempts).
+\end{itemize}
+
+Example progression:
+\begin{itemize}
+\item Attempt 1 fails: wait 1 second, retry.
+\item Attempt 2 fails: wait 1-2 seconds, retry.
+\item Attempt 3 fails: return empty dataset, fall back to mock data.
+\end{itemize}
+
+This ensures transient network hiccups don't cause immediate failures, while permanent outages are detected quickly.
+
+\subsection{Data Persistence Fallback Strategy}
+
+When Supabase connectivity is unavailable, the platform implements graceful degradation:
+
+\begin{enumerate}
+\item \textbf{Local State Preservation}: React Query caches are persisted to browser localStorage, enabling read-only access to recently-viewed data.
+
+\item \textbf{Mock Data Mode}: A fallback dataset (in \tech{src/data/mockData.ts}) provides realistic question bank and student profile samples for development and demonstration.
+
+\item \textbf{Offline Queuing}: User actions (answers submitted, tests completed) are queued in indexedDB. Once connectivity restores, changes are synced to Supabase with conflict resolution.
+
+\item \textbf{User Notification}: Clear messaging informs the user of limited connectivity:
+   \begin{verbatim}
+   ⚠️ Working Offline
+   Some features are limited. Changes will sync when connection restores.
+   \end{verbatim}
+\end{enumerate}
+
+\subsection{Supabase Architecture Best Practices}
+
+\subsubsection{Row-Level Security (RLS) Policies}
+
+All public schema tables enforce RLS:
+
+\begin{equation}
+\boxed{\begin{array}{l}
+\text{profiles: } \text{users can view/edit only their own profile} \\
+\text{user\_progress: } \text{users can view/edit only their own progress records} \\
+\text{answered\_questions: } \text{users can view/edit only their own answers} \\
+\text{test\_history: } \text{users can view their own tests; teachers can view enrolled students'} \\
+\text{teacher schema: } \text{teachers have full access to own courses/assignments; students have read-only on enrollments}
+\end{array}}
+\end{equation}
+
+RLS policies are enforced at the database layer, ensuring even compromised API keys cannot access unauthorized data.
+
+\subsubsection{Connection Pooling and Performance}
+
+Supabase REST API includes connection pooling and caching:
+
+\begin{itemize}
+\item HTTP/2 multiplexing reduces overhead for concurrent requests.
+\item Supabase edge functions support request batching to reduce round trips.
+\item Query responses are cached by Supabase CDN when appropriate (e.g., question bank read-only data).
+\end{itemize}
+
+For high-frequency operations (e.g., rapid question serving during adaptive sessions), batch requests are used to reduce latency:
+
+\begin{equation}
+\text{Time per request} = \text{network\_latency} + \text{database\_query\_time}
+\end{equation}
+
+Batching amortizes network latency:
+
+\begin{equation}
+\text{Cost (N requests batched)} < N \times \text{Cost (N individual requests)}
+\end{equation}
+
 \section{Telemetry, Persistence, and Event-Driven Observability}
 
 \subsection{State Persistence Strategy}

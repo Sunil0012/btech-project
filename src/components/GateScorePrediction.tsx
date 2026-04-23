@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Lock, TrendingUp, Target, AlertCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { calculateGateScorePrediction } from "@/lib/gateScorePredictor";
 import {
   ResponsiveContainer,
   BarChart,
@@ -32,128 +33,15 @@ interface GateScorePredictionProps {
     test_type: string;
     score: number;
     max_score: number;
+    correct_answers?: number;
+    total_questions?: number;
+    completed_at?: string | null;
   }>;
 }
 
 const UNLOCK_ELO_THRESHOLD = 2500;
-const UNLOCK_COMPLETION_THRESHOLD = 70;
+const UNLOCK_COMPLETION_THRESHOLD = 100;
 const BASE_ELO_FOR_PROGRESS = 1200;
-const BASE_GATE_SCORE = 35;
-
-interface GatePrediction {
-  minScore: number;
-  maxScore: number;
-  expectedScore: number;
-  confidence: number;
-  recommendation: string;
-}
-
-function calculateGateScorePrediction(
-  eloScore: number,
-  accuracy: number,
-  subjectPerformance: Array<{
-    name: string;
-    accuracy: number | null;
-    score?: { correct: number; total: number };
-  }>,
-  testHistory?: Array<{
-    test_type: string;
-    score: number;
-    max_score: number;
-  }>
-): GatePrediction {
-  const eloNormalized = Math.max(0, Math.min(100, ((eloScore - 1200) / 600) * 100));
-
-  // Filter tests by type and performance threshold
-  const filterTestsByThreshold = (testType: string, threshold: number) => {
-    if (!testHistory) return [];
-    return testHistory.filter((test) => {
-      if (test.test_type !== testType) return false;
-      if (test.max_score === 0) return false;
-      const percentage = (test.score / test.max_score) * 100;
-      return percentage >= threshold;
-    });
-  };
-
-  const fullMockTests = filterTestsByThreshold("full-mock", 50);
-  const topicWiseTests = filterTestsByThreshold("topic-wise", 70);
-  const adaptiveTests = filterTestsByThreshold("adaptive", 70);
-
-  // Calculate separate averages for each test type
-  const getTestTypeAverage = (tests: typeof testHistory) => {
-    if (!tests || tests.length === 0) return null;
-    const totalScore = tests.reduce((sum, test) => sum + test.score, 0);
-    const totalMaxScore = tests.reduce((sum, test) => sum + test.max_score, 0);
-    return totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : null;
-  };
-
-  const fullMockAvg = getTestTypeAverage(fullMockTests);
-  const topicWiseAvg = getTestTypeAverage(topicWiseTests);
-  const adaptiveAvg = getTestTypeAverage(adaptiveTests);
-
-  // Use filtered test averages, fall back to subject accuracy if no tests available
-  const testBasedAccuracy = (
-    (fullMockAvg || 0) * 0.5 +
-    (topicWiseAvg || 0) * 0.25 +
-    (adaptiveAvg || 0) * 0.25
-  );
-
-  const subjectAccuracies = subjectPerformance
-    .filter((subject) => subject.accuracy !== null)
-    .map((subject) => subject.accuracy || 0);
-
-  const avgSubjectAccuracy = subjectAccuracies.length > 0
-    ? subjectAccuracies.reduce((sum, value) => sum + value, 0) / subjectAccuracies.length
-    : 50;
-
-  // Use test-based accuracy if available, otherwise fall back to overall accuracy
-  const finalAccuracy = testBasedAccuracy > 0 ? testBasedAccuracy : accuracy;
-  const accuracyFactor = finalAccuracy;
-  const eloFactor = eloNormalized;
-  const consistencyFactor = Math.min(100, 100 - Math.abs(finalAccuracy - avgSubjectAccuracy));
-  const improvementFactor = 50 + (finalAccuracy / 2);
-
-  const predictedPercentage = (
-    (accuracyFactor * 0.4) +
-    (eloFactor * 0.3) +
-    (consistencyFactor * 0.2) +
-    (improvementFactor * 0.1)
-  );
-
-  const baseScore = BASE_GATE_SCORE + (predictedPercentage / 60) * 40;
-  const expectedScore = Math.round(baseScore);
-  const minScore = Math.max(0, Math.round(baseScore - 8));
-  const maxScore = Math.min(100, Math.round(baseScore + 8));
-  const confidence = Math.min(95, 50 + (accuracy / 2) + (eloNormalized / 5));
-
-  let recommendation = "";
-  if (finalAccuracy < 50) {
-    recommendation = "Build stronger fundamentals first, then increase practice volume topic by topic.";
-  } else if (finalAccuracy < 70) {
-    recommendation = "Good momentum. Improve weak subjects and keep solving consistently to push your score band upward.";
-  } else if (finalAccuracy < 85) {
-    recommendation = "You are performing well. Focus on hard questions, mock-test stamina, and error reduction.";
-  } else {
-    recommendation = "Excellent shape. Maintain consistency and spend more time on advanced and mixed-difficulty sets.";
-  }
-
-  // Add test-specific insight
-  if (testBasedAccuracy > 0) {
-    if (fullMockTests.length > 0 && topicWiseTests.length === 0 && adaptiveTests.length === 0) {
-      recommendation += " Focus on topic-wise and adaptive tests to build a more robust assessment.";
-    } else if (fullMockTests.length === 0 && topicWiseTests.length > 0 && adaptiveTests.length === 0) {
-      recommendation += " Take full mock tests to assess your performance under exam conditions.";
-    }
-  }
-
-  return {
-    minScore,
-    maxScore,
-    expectedScore,
-    confidence: Math.round(confidence),
-    recommendation,
-  };
-}
 
 export function GateScorePrediction({
   studentElo,
@@ -173,8 +61,14 @@ export function GateScorePrediction({
 
   const prediction = useMemo(() => {
     if (!isUnlocked) return null;
-    return calculateGateScorePrediction(studentElo, overallAccuracy, subjectPerformance, testHistory);
-  }, [isUnlocked, studentElo, overallAccuracy, subjectPerformance, testHistory]);
+    return calculateGateScorePrediction({
+      studentElo,
+      answeredQuestionsCount,
+      overallAccuracy,
+      subjectPerformance,
+      testHistory,
+    });
+  }, [answeredQuestionsCount, isUnlocked, studentElo, overallAccuracy, subjectPerformance, testHistory]);
 
   const eloProgressToUnlock = Math.max(
     0,

@@ -2,6 +2,12 @@ import type { Question } from "./questions";
 import { fullGateTestQuestions } from "./fullGateTest";
 import { gateMockPaper2Questions } from "./gateMockPaper2";
 import { gateMockPaper3Questions } from "./gateMockPaper3";
+import {
+  gateMockPaper4Questions,
+  gateMockPaper5Questions,
+  gateMockPaper6Questions,
+  gateMockPaper7Questions,
+} from "./additionalMockPapers";
 import { da24S1Questions } from "./DA2024";
 import { da2025Questions } from "./DA2025";
 import { da2026Questions } from "./DA2026";
@@ -10,6 +16,10 @@ export type FullTestId =
   | "full-gate"
   | "mock-paper-2"
   | "mock-paper-3"
+  | "mock-paper-4"
+  | "mock-paper-5"
+  | "mock-paper-6"
+  | "mock-paper-7"
   | "da-2024-s1"
   | "da-2025"
   | "da-2026";
@@ -68,6 +78,54 @@ const fullTests: Record<FullTestId, { meta: FullTestMeta; questions: readonly Fu
       paperCode: "Mock Paper",
     },
     questions: gateMockPaper3Questions,
+  },
+  "mock-paper-4": {
+    meta: {
+      id: "mock-paper-4",
+      label: "Mock Paper 4",
+      description: "Interactive version of Mock Paper 4 using the newly added GATE DA question bank.",
+      questionCount: gateMockPaper4Questions.length,
+      durationMinutes: 180,
+      maxMarks: getTotalMarks(gateMockPaper4Questions),
+      paperCode: "Mock Paper",
+    },
+    questions: gateMockPaper4Questions,
+  },
+  "mock-paper-5": {
+    meta: {
+      id: "mock-paper-5",
+      label: "Mock Paper 5",
+      description: "Interactive version of Mock Paper 5 using the newly added GATE DA question bank.",
+      questionCount: gateMockPaper5Questions.length,
+      durationMinutes: 180,
+      maxMarks: getTotalMarks(gateMockPaper5Questions),
+      paperCode: "Mock Paper",
+    },
+    questions: gateMockPaper5Questions,
+  },
+  "mock-paper-6": {
+    meta: {
+      id: "mock-paper-6",
+      label: "Mock Paper 6",
+      description: "Interactive version of Mock Paper 6 using the newly added GATE DA question bank.",
+      questionCount: gateMockPaper6Questions.length,
+      durationMinutes: 180,
+      maxMarks: getTotalMarks(gateMockPaper6Questions),
+      paperCode: "Mock Paper",
+    },
+    questions: gateMockPaper6Questions,
+  },
+  "mock-paper-7": {
+    meta: {
+      id: "mock-paper-7",
+      label: "Mock Paper 7",
+      description: "Interactive version of Mock Paper 7 using the newly added GATE DA question bank.",
+      questionCount: gateMockPaper7Questions.length,
+      durationMinutes: 180,
+      maxMarks: getTotalMarks(gateMockPaper7Questions),
+      paperCode: "Mock Paper",
+    },
+    questions: gateMockPaper7Questions,
   },
   "da-2024-s1": {
     meta: {

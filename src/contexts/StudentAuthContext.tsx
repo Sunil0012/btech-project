@@ -62,7 +62,7 @@ interface StudentAuthContextType {
   answeredQuestions: Set<string>;
   addAnsweredQuestion: (id: string, wasCorrect?: boolean) => void;
   subjectScores: SubjectScoreMap;
-  updateSubjectScore: (subjectId: string, correct: boolean) => void;
+  updateSubjectScore: (subjectId: string, correct: boolean, topicId?: string | null) => void;
   recordTestHistory: (entry: TestHistoryInput) => Promise<void>;
 }
 
@@ -571,7 +571,7 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
       );
   }, [user]);
 
-  const updateSubjectScore = useCallback((subjectId: string, correct: boolean) => {
+  const updateSubjectScore = useCallback((subjectId: string, correct: boolean, topicId?: string | null) => {
     setSubjectScores((previous) => {
       const existing = previous[subjectId] || { correct: 0, total: 0 };
       const nextScores = {
@@ -585,6 +585,8 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(SCORES_STORAGE_KEY, JSON.stringify(nextScores));
 
       if (user) {
+        const now = new Date().toISOString();
+
         void studentSupabase
           .from("user_progress")
           .upsert(
@@ -594,16 +596,47 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
               topic_id: OVERALL_TOPIC_ID,
               correct: nextScores[subjectId].correct,
               total: nextScores[subjectId].total,
-              last_practiced: new Date().toISOString(),
+              last_practiced: now,
             },
             {
               onConflict: "user_id,subject_id,topic_id",
             }
           );
 
+        if (topicId && topicId !== OVERALL_TOPIC_ID) {
+          void studentSupabase
+            .from("user_progress")
+            .select("correct,total")
+            .eq("user_id", user.id)
+            .eq("subject_id", subjectId)
+            .eq("topic_id", topicId)
+            .maybeSingle()
+            .then(({ data }) => {
+              const nextTopicCorrect = (data?.correct || 0) + (correct ? 1 : 0);
+              const nextTopicTotal = (data?.total || 0) + 1;
+
+              return studentSupabase.from("user_progress").upsert(
+                {
+                  user_id: user.id,
+                  subject_id: subjectId,
+                  topic_id: topicId,
+                  correct: nextTopicCorrect,
+                  total: nextTopicTotal,
+                  last_practiced: now,
+                },
+                {
+                  onConflict: "user_id,subject_id,topic_id",
+                }
+              );
+            })
+            .catch((error) => {
+              console.error("Could not sync topic progress", error);
+            });
+        }
+
         void studentSupabase
           .from("profiles")
-          .update({ last_active: new Date().toISOString() })
+          .update({ last_active: now })
           .eq("user_id", user.id);
 
         void syncTeacherMirror(user, profile, nextScores, studentEloState);

@@ -1,14 +1,17 @@
 import { ArrowRight, CalendarClock, ClipboardCheck, ClipboardList, Clock3, Download, Layers3, Send, Sparkles, Users2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { AssignmentBuilderModal } from "@/components/AssignmentBuilderModal";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { TeacherMetricCard } from "@/components/teacher/TeacherMetricCard";
 import { TeacherWorkspaceHeader } from "@/components/teacher/TeacherWorkspaceHeader";
 import { useTeacherWorkspace } from "@/hooks/useTeacherWorkspace";
 import { parseAssignmentDescription } from "@/lib/assignmentContent";
+import { fetchAssignmentFiles, downloadAssignmentFile } from "@/lib/assignmentFileUpload";
 import { getAssignmentSubjectLabel } from "@/lib/classroom";
 
 function TeacherAssignmentsPage() {
   const { workspace, loading, refresh } = useTeacherWorkspace();
+  const [assignmentFilesMap, setAssignmentFilesMap] = useState<Record<string, any[]>>({});
   const now = Date.now();
 
   const assignmentRows = workspace.assignments
@@ -51,6 +54,28 @@ function TeacherAssignmentsPage() {
     const student = workspace.students.find((item) => item.user_id === submission.student_id) || null;
     return { submission, assignment, student };
   });
+
+  // Fetch assignment files for all assignments
+  useEffect(() => {
+    const fetchAllFiles = async () => {
+      const filesMap: Record<string, any[]> = {};
+      for (const assignment of workspace.assignments) {
+        try {
+          const files = await fetchAssignmentFiles(assignment.id);
+          if (files.length > 0) {
+            filesMap[assignment.id] = files;
+          }
+        } catch (error) {
+          console.error(`Failed to fetch files for assignment ${assignment.id}:`, error);
+        }
+      }
+      setAssignmentFilesMap(filesMap);
+    };
+
+    if (workspace.assignments.length > 0) {
+      void fetchAllFiles();
+    }
+  }, [workspace.assignments]);
 
   return (
     <TeacherLayout>
@@ -155,18 +180,17 @@ function TeacherAssignmentsPage() {
                         {assignmentContent.body || "No assignment description provided."}
                       </p>
 
-                      {assignmentContent.attachments.length > 0 && (
+                      {(assignmentFilesMap[assignment.id]?.length ?? 0) > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {assignmentContent.attachments.map((file) => (
-                            <a
-                              key={`${assignment.id}-${file.name}`}
-                              href={file.dataUrl}
-                              download={file.name}
+                          {assignmentFilesMap[assignment.id]?.map((file) => (
+                            <button
+                              key={file.id}
+                              onClick={() => downloadAssignmentFile(file.id, file.file_name)}
                               className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                             >
                               <Download className="h-3.5 w-3.5 text-primary" />
-                              {file.name}
-                            </a>
+                              {file.file_name}
+                            </button>
                           ))}
                         </div>
                       )}

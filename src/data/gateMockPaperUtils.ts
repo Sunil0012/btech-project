@@ -96,13 +96,18 @@ function mapSubjectAndTopic(question: RawMockQuestion): Pick<Question, "subjectI
       };
     case "machine-learning":
     case "regularization":
+    case "deep-learning":
+    case "natural-language-processing":
       return {
         subjectId: "machine-learning",
-        topicId: /precision|recall|auc|roc|bias|variance|bagging|boosting|f1|cross-validation/i.test(
-          haystack
-        )
-          ? "ml-evaluation"
-          : "ml-supervised",
+        topicId:
+          question.topicId === "natural-language-processing"
+            ? "ml-unsupervised"
+            : /precision|recall|auc|roc|bias|variance|bagging|boosting|f1|cross-validation/i.test(haystack)
+              ? "ml-evaluation"
+              : /cluster|gmm|dbscan|k-means|pca|dimensionality reduction|embedding|topic model/i.test(haystack)
+                ? "ml-unsupervised"
+                : "ml-supervised",
       };
     case "probabilistic-models":
     case "probabilistic-graphical-models":
@@ -124,6 +129,7 @@ function mapSubjectAndTopic(question: RawMockQuestion): Pick<Question, "subjectI
       };
     case "algorithms":
     case "discrete-mathematics":
+    case "programming":
       return {
         subjectId: "programming-dsa",
         topicId: "dsa-complexity",
@@ -137,6 +143,7 @@ function mapSubjectAndTopic(question: RawMockQuestion): Pick<Question, "subjectI
       };
     case "dbms":
     case "normalization":
+    case "databases":
       return {
         subjectId: "dbms",
         topicId:
@@ -155,13 +162,13 @@ function mapSubjectAndTopic(question: RawMockQuestion): Pick<Question, "subjectI
   }
 }
 
-function normalizeId(id: string, prefix: "mock2" | "mock3") {
+function normalizeId(id: string, prefix: string) {
   return id.replace(/^daMock\d+-q/, `${prefix}-q`);
 }
 
 export function normalizeMockPaperQuestions(
   rawQuestions: readonly RawMockQuestion[],
-  prefix: "mock2" | "mock3"
+  prefix: string
 ): Question[] {
   return rawQuestions.map((question) => {
     const type = normalizeType(question);
