@@ -326,7 +326,7 @@ export function buildTeacherRecommendationPathSessions(input: {
   const studentMap = new Map(input.students.map((student) => [student.user_id, student]));
 
   return input.activityEvents
-    .filter((event) => event.event_type === "graph_path_completed")
+    .filter((event) => event.event_type === "graph_path_completed" || event.event_type === "graph_path_progress")
     .filter((event) => !input.studentUserId || event.actor_id === input.studentUserId || event.target_user_id === input.studentUserId)
     .map((event) => {
       const metadata = asRecord(event.metadata) || {};

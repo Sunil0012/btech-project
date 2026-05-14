@@ -6,17 +6,29 @@ import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useStudentAssignments } from "@/hooks/useStudentAssignments";
 import { getAssignmentSubjectLabel } from "@/lib/classroom";
-import { studentSupabase } from "@/integrations/supabase/student-client";
+import { studentSupabase, studentTeacherSupabase } from "@/integrations/supabase/student-client";
 import {
   BookOpen, FileText, Users, BarChart3, FolderOpen,
   ArrowLeft, Download, Clock, CheckCircle, AlertCircle
 } from "lucide-react";
 import type { EnrollmentWithCourse } from "@/lib/classroom";
-import type { StudentTables } from "@/integrations/supabase/student-types";
 
-type CourseFileRow = StudentTables<"course_files">;
-type EnrollmentRow = StudentTables<"enrollments">;
-type ProfileRow = StudentTables<"profiles">;
+type CourseFileRow = {
+  id: string;
+  course_id: string;
+  file_name: string;
+  file_url: string;
+  file_type?: string | null;
+  file_size?: number | null;
+  uploaded_by: string;
+  created_at: string;
+};
+type ProfileRow = {
+  user_id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string;
+};
 
 export default function StudentCourseDetailPage() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -48,7 +60,7 @@ export default function StudentCourseDetailPage() {
     const loadStudents = async () => {
       setLoadingStudents(true);
       try {
-        const { data: enrollments, error: enrollError } = await studentSupabase
+        const { data: enrollments, error: enrollError } = await studentTeacherSupabase
           .from("enrollments")
           .select("student_id")
           .eq("course_id", courseId);
@@ -82,7 +94,7 @@ export default function StudentCourseDetailPage() {
     const loadFiles = async () => {
       setLoadingFiles(true);
       try {
-        const { data: files, error } = await studentSupabase
+        const { data: files, error } = await studentTeacherSupabase
           .from("course_files")
           .select("*")
           .eq("course_id", courseId)

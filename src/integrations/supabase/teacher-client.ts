@@ -2,10 +2,25 @@ import { createClient } from "@supabase/supabase-js";
 import type { TeacherDatabase } from "./teacher-types";
 
 const TEACHER_SUPABASE_PROJECT_ID = import.meta.env.VITE_TEACHER_SUPABASE_PROJECT_ID?.trim();
+export const TEACHER_SUPABASE_SCHEMA =
+  import.meta.env.VITE_TEACHER_SUPABASE_SCHEMA?.trim() || "teacher";
 
-export const TEACHER_SUPABASE_URL =
+const TEACHER_SUPABASE_REMOTE_URL =
   import.meta.env.VITE_TEACHER_SUPABASE_URL?.trim() ||
   (TEACHER_SUPABASE_PROJECT_ID ? `https://${TEACHER_SUPABASE_PROJECT_ID}.supabase.co` : "");
+
+function shouldUseLocalSupabaseProxy() {
+  return (
+    import.meta.env.DEV &&
+    typeof window !== "undefined" &&
+    ["localhost", "127.0.0.1"].includes(window.location.hostname)
+  );
+}
+
+export const TEACHER_SUPABASE_URL =
+  shouldUseLocalSupabaseProxy() && TEACHER_SUPABASE_REMOTE_URL
+    ? `${window.location.origin}/supabase-teacher`
+    : TEACHER_SUPABASE_REMOTE_URL;
 
 export const TEACHER_SUPABASE_PUBLISHABLE_KEY =
   import.meta.env.VITE_TEACHER_SUPABASE_PUBLISHABLE_KEY?.trim() || "";
@@ -25,6 +40,13 @@ const teacherAuthOptions = {
   autoRefreshToken: true,
 } as const;
 
+const teacherClassroomAuthOptions = {
+  storage: localStorage,
+  storageKey: "gate-da-prep-teacher-classroom-auth",
+  persistSession: true,
+  autoRefreshToken: true,
+} as const;
+
 const SESSION_REFRESH_BUFFER_SECONDS = 60;
 
 export const teacherSupabase = createClient<TeacherDatabase, "public">(
@@ -35,22 +57,47 @@ export const teacherSupabase = createClient<TeacherDatabase, "public">(
   }
 );
 
+export const teacherClassroomSupabase = createClient<
+  TeacherDatabase,
+  "teacher" | "public"
+>(
+  TEACHER_SUPABASE_URL || "https://placeholder-teacher.supabase.co",
+  TEACHER_SUPABASE_PUBLISHABLE_KEY || "missing-teacher-publishable-key",
+  {
+    auth: teacherClassroomAuthOptions,
+    db: {
+      schema: TEACHER_SUPABASE_SCHEMA as "teacher" | "public",
+    },
+  }
+);
+
 export async function ensureFreshTeacherSession() {
   const { data, error } = await teacherSupabase.auth.getSession();
   if (error) throw error;
 
   const session = data.session;
-  if (!session) return null;
+  if (!session) {
+    await teacherClassroomSupabase.auth.signOut({ scope: "local" });
+    return null;
+  }
 
   const expiresAt = session.expires_at ?? 0;
   const nowInSeconds = Math.floor(Date.now() / 1000);
   const isExpiringSoon = expiresAt > 0 && expiresAt <= nowInSeconds + SESSION_REFRESH_BUFFER_SECONDS;
 
   if (!isExpiringSoon) {
+    await teacherClassroomSupabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
     return session;
   }
 
   if (!session.refresh_token) {
+    await teacherClassroomSupabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
     return session;
   }
 
@@ -59,8 +106,10 @@ export async function ensureFreshTeacherSession() {
   });
 
   if (refreshError) throw refreshError;
-  return refreshedData.session ?? session;
+  const refreshedSession = refreshedData.session ?? session;
+  await teacherClassroomSupabase.auth.setSession({
+    access_token: refreshedSession.access_token,
+    refresh_token: refreshedSession.refresh_token,
+  });
+  return refreshedSession;
 }
-
-// The live classroom tables are currently served from the public schema.
-export const teacherClassroomSupabase = teacherSupabase as any;

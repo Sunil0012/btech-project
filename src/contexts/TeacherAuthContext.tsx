@@ -62,7 +62,9 @@ function isFetchFailure(error: unknown) {
 
 async function parseAuthError(response: Response) {
   try {
-    const body = await response.json();
+    const text = await response.text();
+    if (!text) return `Auth request failed with status ${response.status}.`;
+    const body = JSON.parse(text);
     return body?.msg || body?.message || `Auth request failed with status ${response.status}.`;
   } catch {
     return `Auth request failed with status ${response.status}.`;
@@ -87,7 +89,12 @@ async function requestAuthEndpoint<T>(path: string, body: Record<string, unknown
     throw new Error(await parseAuthError(response));
   }
 
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  if (!text) {
+    throw new Error(`Auth request returned an empty response with status ${response.status}.`);
+  }
+
+  return JSON.parse(text) as T;
 }
 
 async function applySessionFromAuthPayload(payload: AuthResponseSessionPayload) {

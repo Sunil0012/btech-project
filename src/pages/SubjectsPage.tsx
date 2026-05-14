@@ -33,7 +33,7 @@ export default function SubjectsPage() {
           {visibleSubjects.map((subject, index) => (
             <ScrollReveal key={subject.id} delay={index * 60}>
               <Link to={`/subjects/${subject.id}`} className="block group">
-                <div className="bg-card border rounded-xl p-6 shadow-sm hover:shadow-lg transition-all hover:-translate-y-1 active:scale-[0.98]">
+                <div className="advanced-glass rounded-xl p-6 transition-all hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 hover:border-primary/30 active:scale-[0.98]">
                   <div
                     className="h-12 w-12 rounded-xl flex items-center justify-center mb-4"
                     style={{ backgroundColor: `hsl(${subject.color} / 0.1)`, color: `hsl(${subject.color})` }}
@@ -113,15 +113,15 @@ function SubjectDetail({ subjectId }: { subjectId: string }) {
         {score && (
           <ScrollReveal delay={150}>
             <div className="mt-6 grid grid-cols-3 gap-4">
-              <div className="bg-card border rounded-xl p-4 text-center">
+              <div className="advanced-glass rounded-xl p-4 text-center advanced-card-hover">
                 <p className="text-2xl font-bold">{score.total}</p>
                 <p className="text-xs text-muted-foreground">Attempted</p>
               </div>
-              <div className="bg-card border rounded-xl p-4 text-center">
+              <div className="advanced-glass rounded-xl p-4 text-center advanced-card-hover">
                 <p className="text-2xl font-bold text-success">{score.correct}</p>
                 <p className="text-xs text-muted-foreground">Correct</p>
               </div>
-              <div className="bg-card border rounded-xl p-4 text-center">
+              <div className="advanced-glass rounded-xl p-4 text-center advanced-card-hover">
                 <p className={`text-2xl font-bold ${isWeak ? "text-destructive" : "text-success"}`}>{accuracy}%</p>
                 <p className="text-xs text-muted-foreground">Accuracy</p>
               </div>
@@ -132,7 +132,7 @@ function SubjectDetail({ subjectId }: { subjectId: string }) {
         <ScrollReveal delay={200}>
           <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Link to={`/practice?mode=topic-wise&subject=${subjectId}`} className="block">
-              <div className="bg-card border rounded-xl p-5 hover:shadow-md hover:-translate-y-0.5 transition-all">
+              <div className="advanced-glass rounded-xl p-5 hover:shadow-xl hover:-translate-y-1 hover:border-primary/30 transition-all">
                 <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
                   <Target className="h-5 w-5 text-accent" />
                 </div>
@@ -142,7 +142,7 @@ function SubjectDetail({ subjectId }: { subjectId: string }) {
             </Link>
 
             <Link to={`/practice?mode=adaptive&subject=${subjectId}`} className="block">
-              <div className="bg-card border rounded-xl p-5 hover:shadow-md hover:-translate-y-0.5 transition-all">
+              <div className="advanced-glass rounded-xl p-5 hover:shadow-xl hover:-translate-y-1 hover:border-primary/30 transition-all">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
                   <Brain className="h-5 w-5 text-primary" />
                 </div>
@@ -192,7 +192,7 @@ function TopicCard({
   });
 
   return (
-    <div className="bg-card border rounded-xl overflow-hidden">
+    <div className="advanced-glass rounded-xl overflow-hidden advanced-card-hover group">
       <div className="p-4 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2.5">

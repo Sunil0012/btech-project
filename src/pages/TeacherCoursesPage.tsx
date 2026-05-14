@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { ArrowRight, Layers3, Plus, Sparkles, Users } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { TeacherLayout } from "@/components/TeacherLayout";
@@ -41,6 +41,14 @@ function TeacherCoursesPage() {
     [workspace.assignments, workspace.courses, workspace.enrollments, workspace.submissions]
   );
   const isEmptyState = courseSummaries.length === 0;
+  
+  // Debug: Log course data to console
+  useEffect(() => {
+    console.log("Workspace courses loaded:", {
+      total: workspace.courses.length,
+      courses: workspace.courses.map(c => ({ id: c.id, title: c.title, teacher_id: c.teacher_id }))
+    });
+  }, [workspace.courses]);
 
   const handleCreateCourse = async () => {
     if (!title.trim()) {

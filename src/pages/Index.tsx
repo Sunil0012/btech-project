@@ -98,15 +98,18 @@ export default function Index() {
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
 
-      <section className="section-padding overflow-hidden">
+      <section className="section-padding overflow-hidden bg-[radial-gradient(ellipse_at_top,_hsl(var(--primary)/0.08),_transparent_50%)]">
         <div className="container">
           <div className="grid gap-12 lg:grid-cols-[1.02fr_0.98fr] lg:items-center">
             <div
               className="space-y-8"
               style={{ animation: "fade-up 0.7s cubic-bezier(0.16,1,0.3,1) forwards" }}
             >
-              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-                <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+              <div className="inline-flex items-center gap-2.5 rounded-full border border-primary/20 bg-primary/8 px-4 py-1.5 text-sm font-semibold text-primary shadow-sm">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                </span>
                 Student Workspace + Teacher Command Center
               </div>
 
@@ -153,12 +156,15 @@ export default function Index() {
 
               <div className="grid gap-3 sm:grid-cols-3">
                 {[
-                  { label: "Portal split", value: "2 distinct experiences" },
-                  { label: "Classroom flow", value: "Join code required" },
-                  { label: "Teacher control", value: "Courses, roster, analytics" },
+                  { label: "Portal split", value: "2 distinct experiences", icon: Sparkles },
+                  { label: "Classroom flow", value: "Join code required", icon: Users },
+                  { label: "Teacher control", value: "Courses, roster, analytics", icon: ShieldCheck },
                 ].map((item) => (
-                  <div key={item.label} className="rounded-2xl border bg-card/80 p-4 shadow-sm">
-                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{item.label}</p>
+                  <div key={item.label} className="rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                    <div className="flex items-center gap-2">
+                      <item.icon className="h-3.5 w-3.5 text-primary" />
+                      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{item.label}</p>
+                    </div>
                     <p className="mt-2 text-sm font-semibold text-foreground">{item.value}</p>
                   </div>
                 ))}
@@ -341,12 +347,12 @@ export default function Index() {
               { icon: Trophy, title: "Analytics and Intervention", desc: "Teacher dashboards surface course health, top performers, and who needs help next." },
             ].map((feature, index) => (
               <ScrollReveal key={feature.title} delay={index * 80}>
-                <div className="rounded-xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
-                  <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
+                <div className="group rounded-2xl border border-border/60 bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-primary/20">
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 ring-1 ring-primary/10 transition-transform duration-200 group-hover:scale-105">
                     <feature.icon className="h-5 w-5 text-primary" />
                   </div>
-                  <h3 className="mb-2 font-semibold">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground">{feature.desc}</p>
+                  <h3 className="mb-2 font-semibold text-lg">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
                 </div>
               </ScrollReveal>
             ))}
@@ -354,12 +360,15 @@ export default function Index() {
         </div>
       </section>
 
-      <section className="py-20 bg-primary/5">
+      <section className="py-24 bg-gradient-to-b from-primary/5 via-primary/8 to-background">
         <div className="container text-center">
           <ScrollReveal>
             <div className="mx-auto max-w-2xl space-y-6">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 ring-4 ring-primary/5 mb-4">
+                <Sparkles className="h-7 w-7 text-primary" />
+              </div>
               <h2 className="text-2xl font-bold md:text-3xl">Launch the full classroom experience</h2>
-              <p className="text-lg text-muted-foreground">
+              <p className="text-lg text-muted-foreground leading-relaxed">
                 Students can practice smarter while teachers run classrooms, publish work, and monitor
                 the entire batch from a separate portal.
               </p>

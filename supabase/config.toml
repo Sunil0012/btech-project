@@ -1,1 +1,20 @@
 project_id = "ukiuxecvybwvngwirjqt"
+
+[api]
+schemas = ["public", "graphql_public", "teacher"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = []
+jwt_expiry = 3600
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+max_frequency = "1m0s"
+otp_length = 8

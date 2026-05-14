@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, Eye, EyeOff, Flag } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, Eye, EyeOff, Flag, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStudentAuth } from "@/contexts/AuthContext";
 import { parseAssignmentDescription } from "@/lib/assignmentContent";
@@ -16,7 +16,7 @@ import {
   isQuestionCorrect,
   type AssignmentAnswerValue,
 } from "@/lib/classroom";
-import { updateElo } from "@/data/questions";
+import { applyDarsRatingUpdate, createInitialDarsRatingState } from "@/lib/darsRating";
 
 type QuestionStatus = "answered" | "not-answered" | "not-visited";
 
@@ -25,6 +25,7 @@ function AssignmentAttemptPage() {
   const {
     user,
     profile,
+    answeredQuestions,
     addAnsweredQuestion,
     updateSubjectScore,
     studentElo,
@@ -32,6 +33,7 @@ function AssignmentAttemptPage() {
     recordTestHistory,
   } = useStudentAuth();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [assignment, setAssignment] = useState<Awaited<ReturnType<typeof getStudentAssignmentAttempt>>["assignment"]>(null);
   const [existingSubmission, setExistingSubmission] = useState<Awaited<ReturnType<typeof getStudentAssignmentAttempt>>["submission"]>(null);
   const [assignmentFiles, setAssignmentFiles] = useState<Array<{ id: string; file_name: string; file_size: number; file_type: string }>>([]);
@@ -56,6 +58,7 @@ function AssignmentAttemptPage() {
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     setAssignment(null);
     setExistingSubmission(null);
     setAnswers({});
@@ -92,6 +95,10 @@ function AssignmentAttemptPage() {
           setTimeLeft((result.assignment?.timer_minutes || 0) * 60);
         }
       })
+      .catch((err) => {
+        console.error("Failed to load assignment:", err);
+        setError(err instanceof Error ? err.message : "Failed to load assignment. Please try again.");
+      })
       .finally(() => setLoading(false));
   }, [assignmentId, user]);
 
@@ -99,19 +106,25 @@ function AssignmentAttemptPage() {
   useEffect(() => {
     if (!assignment?.id) return;
 
-    void fetchAssignmentFiles(assignment.id).then((files) => {
-      setAssignmentFiles(
-        files.map((file: any) => ({
-          id: file.id,
-          file_name: file.file_name,
-          file_size: file.file_size,
-          file_type: file.file_type,
-        }))
-      );
-    });
+    void fetchAssignmentFiles(assignment.id)
+      .then((files) => {
+        setAssignmentFiles(
+          files.map((file: any) => ({
+            id: file.id,
+            file_name: file.file_name,
+            file_size: file.file_size,
+            file_type: file.file_type,
+          }))
+        );
+      })
+      .catch((err) => {
+        console.error("Failed to fetch assignment files:", err);
+        // Don't show error for missing files - they're optional
+      });
   }, [assignment?.id]);
 
   const questions = useMemo(() => (assignment ? getQuestionsByAssignment(assignment) : []), [assignment]);
+  const assignmentContent = useMemo(() => parseAssignmentDescription(assignment?.description), [assignment?.description]);
   const filteredQuestions = useMemo(() => {
     if (selectedQuestionCount === null || !assignmentContent?.manualQuestions.length) {
       return questions;
@@ -120,7 +133,6 @@ function AssignmentAttemptPage() {
   }, [questions, selectedQuestionCount, assignmentContent?.manualQuestions.length]);
   const currentQuestion = filteredQuestions[currentIndex];
   const gradedResult = useMemo(() => gradeAssignment(filteredQuestions, answers), [answers, filteredQuestions]);
-  const assignmentContent = useMemo(() => parseAssignmentDescription(assignment?.description), [assignment?.description]);
 
   useEffect(() => {
     assignmentRef.current = assignment;
@@ -177,7 +189,7 @@ function AssignmentAttemptPage() {
           throw new Error("The teacher sync backend did not accept the submission. Deploy the `teacher-sync` edge function and verify the teacher Supabase secrets.");
         }
 
-        let nextElo = studentElo;
+        let darsState = createInitialDarsRatingState(studentElo, answeredQuestions.size);
         const answerObjects: Array<number | number[] | string | null> = [];
         
         currentQuestions.forEach((question) => {
@@ -185,12 +197,18 @@ function AssignmentAttemptPage() {
           const answered = isQuestionAnswered(question, currentAnswers[question.id] ?? null);
           answerObjects.push(currentAnswers[question.id] ?? null);
           if (answered) {
+            const darsUpdate = applyDarsRatingUpdate(darsState, {
+              question,
+              correct,
+              hintsUsed: 0,
+              maxHints: 0,
+            });
+            darsState = darsUpdate.state;
             addAnsweredQuestion(question.id, correct);
             updateSubjectScore(question.subjectId, correct, question.topicId);
           }
-          nextElo = updateElo(nextElo, question.eloRating, correct);
         });
-        setStudentElo(nextElo);
+        setStudentElo(darsState.rating);
 
         try {
           const reviewPayload = buildTestReviewPayload({
@@ -250,6 +268,7 @@ function AssignmentAttemptPage() {
     },
     [
       addAnsweredQuestion,
+      answeredQuestions,
       recordTestHistory,
       setStudentElo,
       studentElo,
@@ -354,6 +373,31 @@ function AssignmentAttemptPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="max-w-md rounded-[2rem] border border-destructive/20 bg-destructive/5 p-10 text-center">
+          <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <p className="text-lg font-semibold text-destructive mb-2">Failed to Load Assignment</p>
+          <p className="text-muted-foreground mb-6">{error}</p>
+          <div className="flex gap-3 justify-center flex-wrap">
+            <Link to="/dashboard">
+              <Button variant="outline">Back to Dashboard</Button>
+            </Link>
+            <Button 
+              variant="hero" 
+              onClick={() => window.location.reload()}
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Try Again
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }

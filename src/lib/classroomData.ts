@@ -1,5 +1,6 @@
 import {
   ensureFreshTeacherSession,
+  TEACHER_SUPABASE_SCHEMA,
   teacherClassroomSupabase,
   teacherSupabase,
 } from "@/integrations/supabase/teacher-client";
@@ -152,7 +153,7 @@ function explainTeacherWorkspaceError(error: unknown, action: string) {
   }
 
   if (isMissingClassroomTableError(error)) {
-    return `Supabase is missing the public classroom tables needed to ${action}. Apply the latest classroom migrations in the linked project and try again.`;
+    return `Supabase is missing the ${TEACHER_SUPABASE_SCHEMA} classroom tables needed to ${action}. Apply the latest classroom migrations in the linked project and try again.`;
   }
 
   if (isTeacherPolicyError(error)) {
@@ -890,7 +891,7 @@ export function subscribeToClassroomChanges(channelName: string, onChange: () =>
       "postgres_changes",
       {
         event: "*",
-        schema: "public",
+        schema: TEACHER_SUPABASE_SCHEMA,
         table,
       },
       queueRefresh

@@ -1,0 +1,8 @@
+subjectName,topicName,attempts,correct,avg_elo,accuracy_pct,priority
+Linear Algebra,Matrices & Determinants,12,3,1483.0,25.0,192.4
+Calculus & Optimization,Differentiation,12,11,1372.0,91.7,21.4
+Artificial Intelligence,Propositional & Predicate Logic,12,12,1262.0,100.0,0.0
+Database Management Systems,SQL & Relational Algebra,12,12,1201.0,100.0,0.0
+General Aptitude,Logical Reasoning,12,12,1296.0,100.0,0.0
+Machine Learning,Supervised Learning,12,12,1442.0,100.0,0.0
+Probability & Statistics,Probability Distributions,12,12,1247.0,100.0,0.0

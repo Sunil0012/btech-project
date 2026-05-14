@@ -35,12 +35,14 @@ import { Footer } from "@/components/Footer";
 import { Navbar } from "@/components/Navbar";
 import { ScrollReveal } from "@/components/ScrollReveal";
 import { Button } from "@/components/ui/button";
+import { QuestionTraversalGraph, type TraversalNodeState } from "@/components/QuestionTraversalGraph";
 import { questions as allQuestions } from "@/data/questions";
 import { useStudentAuth } from "@/contexts/AuthContext";
 import { studentSupabase } from "@/integrations/supabase/student-client";
 import type { StudentTables } from "@/integrations/supabase/student-types";
 import { generateAIInsights, type AIInsightResult } from "@/lib/aiCoach";
 import { buildStudentAnalyticsSummary } from "@/lib/studentAnalytics";
+import { parseTestReviewPayload } from "@/lib/testReview";
 
 const PIE_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444"];
 
@@ -384,7 +386,7 @@ export default function InsightsPage() {
 
         <div className="grid gap-5 lg:grid-cols-2">
           <ScrollReveal delay={150}>
-            <div className="rounded-[28px] border bg-card/90 p-6 shadow-sm">
+            <div className="rounded-[28px] advanced-glass p-6 advanced-card-hover">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-destructive/10 text-destructive">
                   <AlertTriangle className="h-5 w-5" />
@@ -425,7 +427,7 @@ export default function InsightsPage() {
           </ScrollReveal>
 
           <ScrollReveal delay={170}>
-            <div className="rounded-[28px] border bg-card/90 p-6 shadow-sm">
+            <div className="rounded-[28px] advanced-glass p-6 advanced-card-hover">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-success/10 text-success">
                   <Brain className="h-5 w-5" />
@@ -487,6 +489,132 @@ export default function InsightsPage() {
           </ScrollReveal>
         )}
 
+        {/* Adaptive Tests Section */}
+        {testHistory.filter(t => t.test_type === "adaptive").length > 0 && (
+          <ScrollReveal delay={200}>
+            <div className="rounded-[28px] advanced-glass p-6 advanced-card-hover">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <Brain className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Adaptive Test Sessions</h2>
+                  <p className="text-sm text-muted-foreground">Your learning path through adaptive practice.</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {testHistory
+                  .filter(t => t.test_type === "adaptive")
+                  .slice(0, 5)
+                  .map((test, idx) => (
+                    <div key={test.id} className="rounded-xl border bg-muted/30 p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold">Session {idx + 1}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(test.completed_at).toLocaleDateString()} • {test.total_questions} questions • {test.correct_answers} correct
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold">{test.max_score > 0 ? Math.round((test.score / test.max_score) * 100) : 0}%</p>
+                          <p className="text-xs text-muted-foreground">Accuracy</p>
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const payload = parseTestReviewPayload(test.review_payload);
+                        if (!payload?.graph_path) {
+                          return (
+                            <div className="rounded-lg border bg-background/50 p-4 min-h-[300px] flex items-center justify-center">
+                              <p className="text-sm text-muted-foreground italic">Graph data not available for this session</p>
+                            </div>
+                          );
+                        }
+
+                        const nodeStates: Record<string, TraversalNodeState> = {};
+                        payload.graph_path.steps.forEach((step) => {
+                          if (step.correct === true) nodeStates[step.question_id] = "correct";
+                          else if (step.correct === false) nodeStates[step.question_id] = "wrong";
+                          else nodeStates[step.question_id] = "pending";
+                        });
+
+                        return (
+                          <QuestionTraversalGraph
+                            title="Session Graph"
+                            description="Live recommendation path"
+                            questionIds={payload.graph_path.question_path}
+                            nodeStates={nodeStates}
+                            connectionMode="path"
+                            showOrder={true}
+                          />
+                        );
+                      })()}
+
+                      <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-foreground">Legend:</p>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                              <span>Correct</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                              <span>Wrong</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                              <span>Unanswered</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full border-2 border-blue-500"></div>
+                              <span>Subjects mix</span>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs px-2 py-1 bg-muted rounded">E</span>
+                              <span>Easy</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs px-2 py-1 bg-muted rounded">M</span>
+                              <span>Medium</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs px-2 py-1 bg-muted rounded">H</span>
+                              <span>Hard</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Link to="/practice" className="flex-1">
+                          <Button variant="outline" className="w-full gap-2">
+                            <BookOpen className="h-4 w-4" />
+                            Review Answers
+                          </Button>
+                        </Link>
+                        <Button variant="outline" className="gap-2">
+                          View Details
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+
+              {testHistory.filter(t => t.test_type === "adaptive").length > 5 && (
+                <div className="mt-6 text-center">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Showing 5 of {testHistory.filter(t => t.test_type === "adaptive").length} adaptive sessions
+                  </p>
+                </div>
+              )}
+            </div>
+          </ScrollReveal>
+        )}
+
         <ScrollReveal delay={210}>
           <div className="text-center space-y-4 pb-6">
             <p className="text-sm text-muted-foreground">Ready to keep building momentum?</p>
@@ -526,7 +654,7 @@ function MetricCard({
   tone: string;
 }) {
   return (
-    <div className="rounded-[24px] border bg-card/90 p-5 shadow-sm">
+    <div className="rounded-[24px] advanced-glass p-5 advanced-card-hover">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">{label}</p>
         <Icon className={`h-4 w-4 ${tone}`} />
@@ -549,7 +677,7 @@ function ChartCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-[28px] border bg-card/90 p-6 shadow-sm">
+    <div className="rounded-[28px] advanced-glass p-6 advanced-card-hover">
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <Icon className="h-5 w-5" />

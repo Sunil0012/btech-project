@@ -30,11 +30,11 @@ interface TeacherCourseCardProps {
 }
 
 const bannerThemes = [
-  "from-violet-600 via-violet-500 to-fuchsia-400",
-  "from-sky-600 via-cyan-500 to-blue-300",
-  "from-emerald-600 via-teal-500 to-lime-300",
-  "from-slate-700 via-slate-600 to-slate-400",
-  "from-orange-600 via-amber-500 to-yellow-300",
+  "from-primary via-primary/80 to-accent",
+  "from-indigo-600 via-indigo-500 to-purple-400",
+  "from-emerald-600 via-teal-500 to-cyan-400",
+  "from-slate-800 via-slate-700 to-slate-500",
+  "from-rose-600 via-pink-500 to-orange-400",
 ];
 
 const navItems = [

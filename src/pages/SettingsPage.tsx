@@ -99,7 +99,7 @@ export default function SettingsPage() {
         <h1 className="text-3xl font-bold mb-2">Settings</h1>
         <p className="text-muted-foreground mb-8">Manage your account and preferences.</p>
 
-        <div className="grid lg:grid-cols-[240px_1fr] gap-6\">
+        <div className="grid lg:grid-cols-[240px_1fr] gap-6">
           {/* Sidebar */}
           <div className="space-y-1">
             {tabs.map((tab) => (

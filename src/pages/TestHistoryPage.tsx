@@ -217,7 +217,7 @@ export default function TestHistoryPage() {
         </ScrollReveal>
 
         <ScrollReveal delay={80}>
-          <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div className="rounded-2xl advanced-glass p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-foreground">Filter your saved sessions</h2>
@@ -263,8 +263,8 @@ export default function TestHistoryPage() {
 
                 return (
                   <ScrollReveal key={row.id} delay={Math.min(index * 30, 180)}>
-                    <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-                      <div className="flex flex-col gap-4 border-b bg-[linear-gradient(135deg,hsl(var(--primary)/0.08),hsl(var(--accent)/0.08),transparent)] p-5 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="overflow-hidden rounded-2xl advanced-glass advanced-card-hover group">
+                      <div className="flex flex-col gap-4 border-b border-border/50 bg-[linear-gradient(135deg,hsl(var(--primary)/0.08),hsl(var(--accent)/0.08),transparent)] p-5 lg:flex-row lg:items-center lg:justify-between transition-colors group-hover:bg-[linear-gradient(135deg,hsl(var(--primary)/0.12),hsl(var(--accent)/0.12),transparent)]">
                         <div>
                           <div className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getTypeTone(row.test_type)}`}>
                             {getTypeLabel(row.test_type)}
@@ -339,7 +339,7 @@ export default function TestHistoryPage() {
             </div>
           ) : (
             <ScrollReveal>
-              <div className="rounded-2xl border border-dashed bg-card p-10 text-center shadow-sm">
+              <div className="rounded-2xl advanced-glass border-dashed p-10 text-center">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
                   <Sparkles className="h-6 w-6 text-primary" />
                 </div>
@@ -365,7 +365,7 @@ export default function TestHistoryPage() {
 
 function HistoryMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+    <div className="rounded-2xl advanced-glass p-5 advanced-card-hover">
       <div className="flex items-center gap-2 text-muted-foreground">
         <Filter className="h-4 w-4" />
         <p className="text-sm">{label}</p>
@@ -380,7 +380,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   const icon = label === "Duration" ? Clock3 : label === "Accuracy" ? BarChart3 : CalendarDays;
 
   return (
-    <div className="rounded-xl border border-border/70 bg-background/80 p-4">
+    <div className="rounded-xl border border-white/5 bg-background/40 backdrop-blur-md p-4 transition-all hover:bg-background/60">
       <div className="flex items-center gap-2 text-muted-foreground">
         {icon === Clock3 ? <Clock3 className="h-4 w-4" /> : icon === BarChart3 ? <BarChart3 className="h-4 w-4" /> : <CalendarDays className="h-4 w-4" />}
         <p className="text-xs uppercase tracking-[0.16em]">{label}</p>
@@ -462,7 +462,7 @@ function HistoryReviewPage({
         )}
 
         {entries.length === 0 ? (
-          <div className="rounded-2xl border bg-card p-10 text-center shadow-sm">
+          <div className="rounded-2xl advanced-glass p-10 text-center">
             <h2 className="text-2xl font-semibold text-foreground">Review data is not available</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               This attempt does not contain enough saved answer details to rebuild the question-by-question review.
@@ -550,7 +550,7 @@ function HistoryReviewPage({
 
 function StatBox({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div className="rounded-xl border bg-card p-4">
+    <div className="rounded-xl advanced-glass p-4 advanced-card-hover">
       <p className={`text-2xl font-bold ${tone}`}>{value}</p>
       <p className="text-xs text-muted-foreground">{label}</p>
     </div>
@@ -577,7 +577,7 @@ function ReviewQuestionCard({
     : null;
 
   return (
-    <div className="bg-card border rounded-xl p-6 space-y-6">
+    <div className="advanced-glass rounded-xl p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className={`text-xs px-2 py-1 rounded-full font-medium ${
           question.difficulty === "easy" ? "bg-success/10 text-success" :

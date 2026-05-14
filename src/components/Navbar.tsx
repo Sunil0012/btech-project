@@ -68,24 +68,24 @@ export function Navbar({ teacherActivity = [], activityLoading = false }: Navbar
   };
 
   return (
-    <nav className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur-sm">
+    <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-xl shadow-sm">
       <div className="container flex h-16 items-center justify-between">
-        <Link to={user ? (role === "teacher" ? "/teacher/dashboard" : "/dashboard") : "/"} className="flex items-center gap-2 font-bold text-xl">
-          <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
+        <Link to={user ? (role === "teacher" ? "/teacher/dashboard" : "/dashboard") : "/"} className="flex items-center gap-2.5 font-bold text-xl group">
+          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-md shadow-primary/20 transition-transform group-hover:scale-105">
             <GraduationCap className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span>GateWay</span>
+          <span className="tracking-tight">GateWay</span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-1">
+        <div className="hidden md:flex items-center gap-0.5">
           {links.map((link) => (
             <Link
               key={link.to}
               to={link.to}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                 isActive(link.to)
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  ? "bg-primary/10 text-primary shadow-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
               }`}
             >
               <link.icon className="h-4 w-4" />
@@ -149,14 +149,14 @@ export function Navbar({ teacherActivity = [], activityLoading = false }: Navbar
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden border-t bg-background p-4 space-y-2">
+        <div className="md:hidden border-t border-border/60 bg-background/95 backdrop-blur-xl p-4 space-y-1" style={{ animation: 'fade-up 0.25s cubic-bezier(0.16,1,0.3,1) forwards' }}>
           {links.map((link) => (
             <Link
               key={link.to}
               to={link.to}
               onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${
-                isActive(link.to) ? "bg-primary/10 text-primary" : "text-muted-foreground"
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                isActive(link.to) ? "bg-primary/10 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted/50"
               }`}
             >
               <link.icon className="h-4 w-4" />
@@ -165,21 +165,22 @@ export function Navbar({ teacherActivity = [], activityLoading = false }: Navbar
           ))}
           {user && (
             <Link to={settingsPath} onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${
-                isActive(settingsPath) ? "bg-primary/10 text-primary" : "text-muted-foreground"
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                isActive(settingsPath) ? "bg-primary/10 text-primary shadow-sm" : "text-muted-foreground hover:bg-muted/50"
               }`}>
               <Settings className="h-4 w-4" /> Settings
             </Link>
           )}
-          <div className="pt-2 border-t space-y-2">
+          <div className="pt-3 mt-2 border-t border-border/60 space-y-2">
             {user ? (
-              <Button variant="outline" className="w-full" onClick={() => { signOut(); setMobileOpen(false); }}>
+              <Button variant="outline" className="w-full gap-2" onClick={() => { signOut(); setMobileOpen(false); }}>
+                <LogOut className="h-4 w-4" />
                 Logout
               </Button>
             ) : (
               <>
                 <Link to="/student/login" onClick={() => setMobileOpen(false)}>
-                  <Button variant="outline" className="w-full">Student Login</Button>
+                  <Button variant="outline" className="w-full gap-2"><LogIn className="h-4 w-4" />Student Login</Button>
                 </Link>
                 <Link to="/teacher/login" onClick={() => setMobileOpen(false)}>
                   <Button variant="outline" className="w-full">Teacher Portal</Button>

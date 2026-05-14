@@ -1,0 +1,8 @@
+subjectName,attempts,correct,avg_elo,accuracy_pct
+Linear Algebra,12,3,1483.0,25.0
+Calculus & Optimization,12,11,1372.0,91.7
+Artificial Intelligence,12,12,1262.0,100.0
+Database Management Systems,12,12,1201.0,100.0
+General Aptitude,12,12,1296.0,100.0
+Machine Learning,12,12,1442.0,100.0
+Probability & Statistics,12,12,1247.0,100.0

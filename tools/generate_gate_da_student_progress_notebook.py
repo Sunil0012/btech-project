@@ -59,6 +59,7 @@ You can also provide email/password and let the notebook fetch a fresh session a
         """import base64
 import json
 import math
+import os
 import re
 import subprocess
 import uuid
@@ -96,7 +97,13 @@ REPORT_SCORE_WEIGHTS = {"accuracy": 0.40, "elo": 0.30, "consistency": 0.20, "imp
 
 DIFF_ORDER = {"easy": 0, "medium": 1, "hard": 2}
 DIFF_SYMBOL = {"easy": "circle", "medium": "diamond", "hard": "square"}
-STATUS_COLORS = {"correct": "#2ea043", "wrong": "#f85149", "unseen": "#8b949e"}
+STATUS_COLORS = {
+    "correct": "#2ea043",
+    "wrong": "#f85149",
+    "unseen": "#8b949e",
+    "current": "#58a6ff",
+    "pending": "#f2cc60",
+}
 EDGE_KIND_COLORS = {"same-topic": "#3fb950", "subject-flow": "#58a6ff", "subject-bridge": "#f2cc60"}
 
 
@@ -113,7 +120,7 @@ def read_env_file(path: Path) -> dict:
     return env
 
 
-ENV = read_env_file(ENV_PATH)
+ENV = {**read_env_file(ENV_PATH), **os.environ}
 SUPABASE_URL = ENV.get("VITE_STUDENT_SUPABASE_URL")
 SUPABASE_KEY = ENV.get("VITE_STUDENT_SUPABASE_PUBLISHABLE_KEY")
 
@@ -127,16 +134,23 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 # ============================================================
 
 PLACEHOLDER_STUDENT_ID = "paste-student-user-id-here"
-STUDENT_ID = globals().get("STUDENT_ID", None)
+STUDENT_ID = globals().get("STUDENT_ID", ENV.get("STUDENT_ID"))
 
-SUPABASE_ACCESS_TOKEN = globals().get("SUPABASE_ACCESS_TOKEN", None)
-LOGIN_EMAIL = globals().get("LOGIN_EMAIL", None)
-LOGIN_PASSWORD = globals().get("LOGIN_PASSWORD", None)
+SUPABASE_ACCESS_TOKEN = globals().get("SUPABASE_ACCESS_TOKEN", ENV.get("SUPABASE_ACCESS_TOKEN"))
+LOGIN_EMAIL = globals().get("LOGIN_EMAIL", ENV.get("LOGIN_EMAIL"))
+LOGIN_PASSWORD = globals().get("LOGIN_PASSWORD", ENV.get("LOGIN_PASSWORD"))
 
 SIMULATION_TEST_ID = globals().get("SIMULATION_TEST_ID", None)
 SIMULATION_START_ELO = int(globals().get("SIMULATION_START_ELO", 1600))
 SIMULATION_BANK_MODE = str(globals().get("SIMULATION_BANK_MODE", "complete")).strip().lower()
 SIMULATION_STEPS_AHEAD = int(globals().get("SIMULATION_STEPS_AHEAD", 8))
+SIMULATION_MODE = str(globals().get("SIMULATION_MODE", ENV.get("SIMULATION_MODE", "auto"))).strip().lower()
+if SIMULATION_MODE not in {"auto", "off", "force"}:
+    print(f"Unknown SIMULATION_MODE={SIMULATION_MODE!r}; using 'auto' instead.")
+    SIMULATION_MODE = "auto"
+SIMULATION_SESSION_COUNT = int(globals().get("SIMULATION_SESSION_COUNT", 3))
+SIMULATION_SESSION_LENGTH = int(globals().get("SIMULATION_SESSION_LENGTH", 12))
+SIMULATION_SUBJECT_ID = globals().get("SIMULATION_SUBJECT_ID", None)
 
 
 def validate_student_id(student_id: str) -> str:
@@ -209,7 +223,10 @@ def supabase_select(table: str, or_filter: str | None = None, **filters):
     for key, value in filters.items():
         params[key] = f"eq.{value}"
     url = f"{SUPABASE_URL}/rest/v1/{table}?{urlencode(params)}"
-    response = requests.get(url, headers=auth_headers(), timeout=30)
+    try:
+        response = requests.get(url, headers=auth_headers(), timeout=30)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Supabase query failed for {table}: {exc}") from exc
     if (
         response.status_code == 401
         and "JWT expired" in response.text
@@ -217,7 +234,10 @@ def supabase_select(table: str, or_filter: str | None = None, **filters):
         and LOGIN_PASSWORD
     ):
         SUPABASE_ACCESS_TOKEN = fetch_access_token_with_password(LOGIN_EMAIL, LOGIN_PASSWORD)
-        response = requests.get(url, headers=auth_headers(SUPABASE_ACCESS_TOKEN), timeout=30)
+        try:
+            response = requests.get(url, headers=auth_headers(SUPABASE_ACCESS_TOKEN), timeout=30)
+        except requests.RequestException as exc:
+            raise RuntimeError(f"Supabase query failed for {table}: {exc}") from exc
     if not response.ok:
         if response.status_code == 401 and "JWT expired" in response.text:
             raise RuntimeError(
@@ -230,7 +250,13 @@ def supabase_select(table: str, or_filter: str | None = None, **filters):
     return response.json()
 
 
-def safe_supabase_select(table: str, *, allow_missing_table: bool = False, **filters):
+def safe_supabase_select(
+    table: str,
+    *,
+    allow_missing_table: bool = False,
+    allow_network_failure: bool = False,
+    **filters,
+):
     try:
         return supabase_select(table, **filters)
     except RuntimeError as exc:
@@ -243,6 +269,18 @@ def safe_supabase_select(table: str, *, allow_missing_table: bool = False, **fil
             print(
                 f"Table '{table}' is not available yet. Skipping it for now. "
                 "Apply the latest Supabase migration if you want this data."
+            )
+            return []
+        if allow_network_failure and (
+            "Max retries exceeded" in message
+            or "Name or service not known" in message
+            or "Failed to establish a new connection" in message
+            or "ConnectionError" in message
+            or "HTTPSConnectionPool" in message
+        ):
+            print(
+                f"Supabase network access failed for '{table}'. "
+                "Continuing with empty rows so simulation fallback can still run."
             )
             return []
         raise
@@ -268,6 +306,13 @@ if jwt_payload:
     if token_exp:
         exp_ts = pd.to_datetime(int(token_exp), unit="s", utc=True)
         print("JWT expiry (UTC):", exp_ts)
+        if exp_ts <= pd.Timestamp.now(tz="UTC"):
+            print(
+                "Warning: the provided JWT is already expired. "
+                "Clearing it so the notebook can continue with the publishable key and, if needed, simulation fallback."
+            )
+            if not (LOGIN_EMAIL and LOGIN_PASSWORD):
+                SUPABASE_ACCESS_TOKEN = None
 
 if not SUPABASE_ACCESS_TOKEN and LOGIN_EMAIL and LOGIN_PASSWORD:
     try:
@@ -285,7 +330,19 @@ elif not SUPABASE_ACCESS_TOKEN:
         "which may return empty data because of row-level security."
     )
 
-subprocess.run(["node", str(EXPORTER), str(EXPORT_JSON)], check=True, cwd=ROOT)
+try:
+    subprocess.run(["node", str(EXPORTER), str(EXPORT_JSON)], check=True, cwd=ROOT)
+    print(f"Exported latest question dataset to {EXPORT_JSON.name}.")
+except Exception as exc:
+    if EXPORT_JSON.exists():
+        print(
+            f"Question export refresh failed ({exc}). "
+            f"Using cached {EXPORT_JSON.name} instead."
+        )
+    else:
+        raise RuntimeError(
+            f"Question export failed and no cached {EXPORT_JSON.name} file is available."
+        ) from exc
 export_payload = json.loads(EXPORT_JSON.read_text(encoding="utf-8"))
 
 subjects_meta = export_payload.get("subjects", [])
@@ -385,14 +442,23 @@ adaptive_live_ids = {
 question_bank_full["is_live_adaptive_eligible"] = question_bank_full["id"].isin(adaptive_live_ids)
 question_lookup = {row["id"]: row for row in question_bank_full.to_dict("records")}
 
-profiles_df = pd.DataFrame(supabase_select("profiles", user_id=STUDENT_ID))
-test_history_df = pd.DataFrame(supabase_select("test_history", user_id=STUDENT_ID))
-user_progress_df = pd.DataFrame(supabase_select("user_progress", user_id=STUDENT_ID))
-answered_df = pd.DataFrame(supabase_select("answered_questions", user_id=STUDENT_ID))
+profiles_df = pd.DataFrame(
+    safe_supabase_select("profiles", user_id=STUDENT_ID, allow_network_failure=True)
+)
+test_history_df = pd.DataFrame(
+    safe_supabase_select("test_history", user_id=STUDENT_ID, allow_network_failure=True)
+)
+user_progress_df = pd.DataFrame(
+    safe_supabase_select("user_progress", user_id=STUDENT_ID, allow_network_failure=True)
+)
+answered_df = pd.DataFrame(
+    safe_supabase_select("answered_questions", user_id=STUDENT_ID, allow_network_failure=True)
+)
 activity_df = pd.DataFrame(
     safe_supabase_select(
         "activity_events",
         allow_missing_table=True,
+        allow_network_failure=True,
         or_filter=f"(actor_id.eq.{STUDENT_ID},target_user_id.eq.{STUDENT_ID})",
     )
 )
@@ -506,6 +572,37 @@ def resolve_question_record(question_id: str, snapshot_by_id: dict | None = None
     return question_lookup.get(question_id)
 
 
+QUESTION_TIMELINE_COLUMNS = [
+    "test_id",
+    "test_type",
+    "completed_at",
+    "subject_id",
+    "topic_id",
+    "score",
+    "max_score",
+    "step_number",
+    "question_id",
+    "question_text",
+    "question_type",
+    "difficulty",
+    "question_elo",
+    "marks",
+    "subjectId",
+    "topicId",
+    "subjectName",
+    "topicName",
+    "answer",
+    "answer_state",
+    "answered",
+    "correct",
+    "time_spent_seconds",
+    "rapid_guess_warning",
+    "rapid_guess_threshold_seconds",
+    "elo_adjustment",
+    "warning_text",
+    "remediation_for_question_id",
+]
+
 question_timeline_rows = []
 for row in test_history_df.itertuples(index=False):
     payload = parse_review_payload(getattr(row, "review_payload", None))
@@ -574,7 +671,7 @@ for row in test_history_df.itertuples(index=False):
             }
         )
 
-student_question_timeline_df = pd.DataFrame(question_timeline_rows)
+student_question_timeline_df = pd.DataFrame(question_timeline_rows, columns=QUESTION_TIMELINE_COLUMNS)
 if not student_question_timeline_df.empty:
     student_question_timeline_df["completed_at"] = pd.to_datetime(
         student_question_timeline_df["completed_at"], errors="coerce", utc=True
@@ -582,6 +679,72 @@ if not student_question_timeline_df.empty:
     student_question_timeline_df = student_question_timeline_df.sort_values(
         ["completed_at", "test_id", "step_number"]
     ).reset_index(drop=True)
+
+session_scope_rows = []
+if not student_question_timeline_df.empty:
+    for test_id, group in student_question_timeline_df.groupby("test_id", dropna=False):
+        subject_ids = sorted(
+            {
+                str(value).strip()
+                for value in group["subjectId"].dropna().tolist()
+                if str(value).strip()
+            }
+        )
+        topic_ids = sorted(
+            {
+                str(value).strip()
+                for value in group["topicId"].dropna().tolist()
+                if str(value).strip()
+            }
+        )
+        session_scope_rows.append(
+            {
+                "test_id": test_id,
+                "derived_subject_id": subject_ids[0] if len(subject_ids) == 1 else None,
+                "derived_topic_id": topic_ids[0] if len(topic_ids) == 1 else None,
+                "derived_subject_scope": (
+                    get_subject_name(subject_ids[0])
+                    if len(subject_ids) == 1
+                    else "Mixed subjects"
+                    if len(subject_ids) > 1
+                    else None
+                ),
+                "derived_topic_scope": (
+                    get_topic_name(subject_ids[0], topic_ids[0])
+                    if len(subject_ids) == 1 and len(topic_ids) == 1
+                    else "Mixed topics"
+                    if len(topic_ids) > 1
+                    else None
+                ),
+            }
+        )
+
+session_scope_df = pd.DataFrame(
+    session_scope_rows,
+    columns=[
+        "test_id",
+        "derived_subject_id",
+        "derived_topic_id",
+        "derived_subject_scope",
+        "derived_topic_scope",
+    ],
+)
+
+if not test_history_df.empty:
+    test_history_df = test_history_df.merge(session_scope_df, left_on="id", right_on="test_id", how="left")
+    test_history_df = test_history_df.drop(columns=["test_id"], errors="ignore")
+    if "subject_id" in test_history_df.columns:
+        subject_series = test_history_df["subject_id"]
+        missing_subject_mask = subject_series.isna() | (subject_series.astype(str).str.strip() == "")
+        test_history_df.loc[missing_subject_mask, "subject_id"] = test_history_df.loc[
+            missing_subject_mask, "derived_subject_id"
+        ]
+    if "topic_id" in test_history_df.columns:
+        topic_series = test_history_df["topic_id"]
+        missing_topic_mask = topic_series.isna() | (topic_series.astype(str).str.strip() == "")
+        test_history_df.loc[missing_topic_mask, "topic_id"] = test_history_df.loc[
+            missing_topic_mask, "derived_topic_id"
+        ]
 
 if not answered_df.empty:
     answered_enriched_df = answered_df.merge(
@@ -1834,6 +1997,10 @@ simulation_sessions_df = pd.DataFrame()
 simulation_steps_df = pd.DataFrame()
 simulation_candidates_df = pd.DataFrame()
 future_recommendations_df = pd.DataFrame()
+simulation_summary_df = pd.DataFrame()
+simulation_data_source = "live"
+simulated_history_df = pd.DataFrame()
+simulated_attempts_df = pd.DataFrame()
 
 adaptive_history_df = (
     test_history_df[test_history_df["test_type"] == "adaptive"].copy()
@@ -1841,41 +2008,760 @@ adaptive_history_df = (
     else pd.DataFrame()
 )
 
-if adaptive_history_df.empty:
-    print("No adaptive sessions were found for this student.")
+def stable_student_seed(student_id):
+    try:
+        return uuid.UUID(str(student_id)).int % (2**32)
+    except Exception:
+        return sum(ord(ch) for ch in str(student_id)) % (2**32)
+
+
+def choose_simulation_subject_id(bank_df, progress_df, seed):
+    available_subjects = [
+        str(value)
+        for value in bank_df.get("subjectId", pd.Series(dtype=object)).dropna().tolist()
+        if str(value).strip()
+    ]
+    available_subjects = sorted(set(available_subjects))
+    if not available_subjects:
+        return None
+
+    requested_subject = str(SIMULATION_SUBJECT_ID).strip() if SIMULATION_SUBJECT_ID else ""
+    if requested_subject and requested_subject in available_subjects:
+        return requested_subject
+
+    if not progress_df.empty and "subject_id" in progress_df.columns:
+        progress_candidates = progress_df.copy()
+        for required in ["total", "correct"]:
+            if required not in progress_candidates.columns:
+                progress_candidates[required] = 0
+        progress_candidates = (
+            progress_candidates.groupby("subject_id", dropna=False)[["total", "correct"]]
+            .sum()
+            .reset_index()
+        )
+        if not progress_candidates.empty:
+            progress_candidates = progress_candidates[progress_candidates["subject_id"].notna()].copy()
+            progress_candidates["accuracy"] = np.where(
+                progress_candidates["total"] > 0,
+                progress_candidates["correct"] / progress_candidates["total"],
+                0,
+            )
+            progress_candidates = progress_candidates.sort_values(
+                ["total", "accuracy"], ascending=[False, True]
+            )
+            for subject_id in progress_candidates["subject_id"].astype(str).tolist():
+                if subject_id in available_subjects:
+                    return subject_id
+
+    return available_subjects[seed % len(available_subjects)]
+
+
+def build_simulated_answer(question, correct, rng):
+    qtype = str(question.get("type") or "mcq").lower()
+
+    if qtype == "mcq":
+        correct_answer = question.get("correctAnswer")
+        options = list(question.get("options") or [])
+        if correct:
+            return correct_answer
+        wrong_options = [option for option in options if option != correct_answer]
+        if wrong_options:
+            return wrong_options[int(rng.integers(0, len(wrong_options)))]
+        return None if correct_answer is None else f"not-{correct_answer}"
+
+    if qtype == "msq":
+        correct_answers = list(question.get("correctAnswers") or [])
+        options = list(question.get("options") or [])
+        if correct:
+            return correct_answers
+        wrong_pool = [option for option in options if option not in correct_answers]
+        if wrong_pool:
+            sample_size = max(1, min(len(wrong_pool), len(correct_answers) or 1))
+            picked = rng.choice(wrong_pool, size=sample_size, replace=False)
+            return sorted([str(item) for item in np.atleast_1d(picked).tolist()])
+        if correct_answers:
+            return correct_answers[:-1] or [f"not-{correct_answers[0]}"]
+        return []
+
+    if qtype == "nat":
+        correct_nat = question.get("correctNat") or {}
+        minimum = correct_nat.get("min")
+        maximum = correct_nat.get("max")
+        if minimum is None or maximum is None:
+            return 0 if correct else -1
+        minimum = float(minimum)
+        maximum = float(maximum)
+        midpoint = round((minimum + maximum) / 2, 2)
+        if correct:
+            return midpoint
+        spread = max(1.0, abs(maximum - minimum) + 1.0)
+        direction = -1 if rng.random() < 0.5 else 1
+        return round((minimum - spread) if direction < 0 else (maximum + spread), 2)
+
+    return question.get("correctAnswer") if correct else None
+
+
+def simulate_attempt_outcome(question, running_elo, step_number, rng):
+    difficulty = str(question.get("difficulty") or "medium").lower()
+    question_elo = float(question.get("eloRating", 1400) or 1400)
+    base_probability = 1 / (1 + math.exp((question_elo - float(running_elo)) / 220))
+    difficulty_bias = {"easy": 0.12, "medium": 0.0, "hard": -0.08}.get(difficulty, 0.0)
+    fatigue_penalty = min(0.08, max(step_number - 8, 0) * 0.01)
+    correct_probability = float(np.clip(base_probability + difficulty_bias - fatigue_penalty, 0.18, 0.94))
+    correct = bool(rng.random() < correct_probability)
+
+    threshold = int(get_rapid_guess_threshold_seconds(question))
+    target_multiplier = {"easy": 1.08, "medium": 1.18, "hard": 1.32}.get(difficulty, 1.15)
+    if not correct:
+        target_multiplier = max(0.62, target_multiplier - 0.18)
+    time_spent = int(max(4, round(threshold * target_multiplier + rng.normal(0, 6))))
+    if rng.random() < (0.12 if not correct else 0.04):
+        time_spent = int(max(4, round(threshold * (0.42 + 0.18 * rng.random()))))
+    rapid_guess_warning = bool(time_spent < threshold)
+    elo = get_rapid_guess_adjusted_elo_gain(running_elo, question, time_spent, correct)
+
+    return {
+        "correct": correct,
+        "answer": build_simulated_answer(question, correct, rng),
+        "time_spent_seconds": time_spent,
+        "rapid_guess_warning": rapid_guess_warning,
+        "rapid_guess_threshold_seconds": threshold,
+        "warning_text": "Rapid guess detected in simulation." if rapid_guess_warning else None,
+        "elo": elo,
+    }
+
+
+def refresh_simulated_progress_tables(sim_history_df, sim_attempt_df):
+    global test_history_df, student_question_timeline_df, question_attempts_df, answered_attempts_df
+    global correct_attempts_df, wrong_attempts_df, test_summary_df, subject_progress_df
+    global topic_progress_df, weak_topics_report_df
+
+    test_history_df = sim_history_df.copy()
+    if not test_history_df.empty:
+        test_history_df = test_history_df.sort_values(["completed_at", "id"]).reset_index(drop=True)
+        test_history_df["accuracy_pct"] = np.where(
+            test_history_df["total_questions"] > 0,
+            100 * test_history_df["correct_answers"] / test_history_df["total_questions"],
+            np.nan,
+        )
+        test_history_df["score_pct"] = np.where(
+            test_history_df["max_score"] > 0,
+            100 * test_history_df["score"] / test_history_df["max_score"],
+            np.nan,
+        )
+
+    student_question_timeline_df = sim_attempt_df.copy()
+    if not student_question_timeline_df.empty:
+        student_question_timeline_df = student_question_timeline_df.sort_values(
+            ["completed_at", "test_id", "step_number"]
+        ).reset_index(drop=True)
+
+    question_attempts_df = student_question_timeline_df.copy()
+    answered_attempts_df = (
+        question_attempts_df[question_attempts_df["answered"] == True].copy()
+        if not question_attempts_df.empty
+        else pd.DataFrame()
+    )
+    correct_attempts_df = (
+        answered_attempts_df[answered_attempts_df["correct"] == True].copy()
+        if not answered_attempts_df.empty
+        else pd.DataFrame()
+    )
+    wrong_attempts_df = (
+        answered_attempts_df[answered_attempts_df["correct"] == False].copy()
+        if not answered_attempts_df.empty
+        else pd.DataFrame()
+    )
+
+    test_summary_df = (
+        test_history_df.groupby("test_type", dropna=False)
+        .agg(
+            tests_completed=("id", "count"),
+            total_questions=("total_questions", "sum"),
+            questions_attempted=("questions_attempted", "sum"),
+            correct_answers=("correct_answers", "sum"),
+            mean_accuracy_pct=("accuracy_pct", "mean"),
+            mean_score_pct=("score_pct", "mean"),
+            total_duration_seconds=("duration_seconds", "sum"),
+        )
+        .reset_index()
+        .sort_values(["tests_completed", "mean_accuracy_pct"], ascending=[False, False])
+        if not test_history_df.empty
+        else pd.DataFrame(
+            columns=[
+                "test_type",
+                "tests_completed",
+                "total_questions",
+                "questions_attempted",
+                "correct_answers",
+                "mean_accuracy_pct",
+                "mean_score_pct",
+                "total_duration_seconds",
+            ]
+        )
+    )
+
+    if answered_attempts_df.empty:
+        subject_progress_df = pd.DataFrame(
+            columns=["subjectId", "subjectName", "correctAnswers", "totalAnswers", "accuracy_pct"]
+        )
+        topic_progress_df = pd.DataFrame(
+            columns=[
+                "subjectId",
+                "topicId",
+                "subjectName",
+                "topicName",
+                "correctAnswers",
+                "totalAnswers",
+                "accuracy_pct",
+            ]
+        )
+    else:
+        subject_progress_df = (
+            answered_attempts_df.groupby(["subjectId", "subjectName"], dropna=False)["correct"]
+            .agg(["count", "sum"])
+            .reset_index()
+            .rename(columns={"count": "totalAnswers", "sum": "correctAnswers"})
+        )
+        subject_progress_df["accuracy_pct"] = np.where(
+            subject_progress_df["totalAnswers"] > 0,
+            100 * subject_progress_df["correctAnswers"] / subject_progress_df["totalAnswers"],
+            np.nan,
+        )
+
+        topic_progress_df = (
+            answered_attempts_df.groupby(
+                ["subjectId", "topicId", "subjectName", "topicName"], dropna=False
+            )["correct"]
+            .agg(["count", "sum"])
+            .reset_index()
+            .rename(columns={"count": "totalAnswers", "sum": "correctAnswers"})
+        )
+        topic_progress_df["accuracy_pct"] = np.where(
+            topic_progress_df["totalAnswers"] > 0,
+            100 * topic_progress_df["correctAnswers"] / topic_progress_df["totalAnswers"],
+            np.nan,
+        )
+
+    weak_topics_report_df = (
+        topic_progress_df[topic_progress_df["accuracy_pct"] < WEAK_TOPIC_THRESHOLD_REPORT * 100]
+        .sort_values(["accuracy_pct", "totalAnswers"], ascending=[True, False])
+        .reset_index(drop=True)
+        if not topic_progress_df.empty
+        else pd.DataFrame(columns=topic_progress_df.columns)
+    )
+
+
+adaptive_timeline_test_ids = set()
+if not student_question_timeline_df.empty and {"test_id", "test_type"}.issubset(student_question_timeline_df.columns):
+    adaptive_timeline_test_ids = set(
+        student_question_timeline_df[
+            student_question_timeline_df["test_type"] == "adaptive"
+        ]["test_id"].dropna().astype(str).tolist()
+    )
+
+live_replay_session_ids = (
+    adaptive_history_df[adaptive_history_df["id"].astype(str).isin(adaptive_timeline_test_ids)]["id"]
+    .astype(str)
+    .tolist()
+    if not adaptive_history_df.empty and adaptive_timeline_test_ids
+    else []
+)
+
+use_simulation_fallback = SIMULATION_MODE == "force" or (
+    SIMULATION_MODE == "auto" and (adaptive_history_df.empty or len(live_replay_session_ids) == 0)
+)
+
+if use_simulation_fallback:
+    if SIMULATION_MODE == "force":
+        print("SIMULATION_MODE='force' selected. Building a deterministic simulation fallback from the project question graph.")
+    elif adaptive_history_df.empty or len(live_replay_session_ids) == 0:
+        print(
+            "No replayable adaptive sessions were visible for this student. "
+            "Building a deterministic simulation fallback from the project question graph."
+        )
+    else:
+        print("Building a deterministic simulation fallback from the project question graph.")
+
+    if SIMULATION_BANK_MODE == "live":
+        simulation_bank_df = question_bank_full[question_bank_full["is_live_adaptive_eligible"]].copy()
+    else:
+        simulation_bank_df = question_bank_full.copy()
+
+    if simulation_bank_df.empty:
+        print("The simulation bank is empty. Unable to build a synthetic adaptive path.")
+    else:
+        simulation_data_source = "synthetic"
+        simulation_bank_records = simulation_bank_df.to_dict("records")
+        simulation_seed = stable_student_seed(STUDENT_ID)
+        rng = np.random.default_rng(simulation_seed)
+        base_now = pd.Timestamp.now(tz="UTC").floor("s")
+        session_count = max(1, int(SIMULATION_SESSION_COUNT))
+        session_subject_id = choose_simulation_subject_id(simulation_bank_df, user_progress_df, simulation_seed)
+        running_elo = float(SIMULATION_START_ELO or current_elo or 1600)
+
+        prior_answered_ids = set()
+        if not answered_df.empty and "question_id" in answered_df.columns:
+            prior_answered_ids.update(answered_df["question_id"].dropna().astype(str).tolist())
+        if not student_question_timeline_df.empty:
+            prior_answered_ids.update(
+                student_question_timeline_df[student_question_timeline_df["answered"] == True]["question_id"]
+                .dropna()
+                .astype(str)
+                .tolist()
+            )
+
+        history_rows = []
+        attempt_rows = []
+        selected_step_rows = []
+        candidate_rows = []
+
+        for session_index in range(session_count):
+            session_id = f"sim-adaptive-{str(STUDENT_ID)[:8]}-{session_index + 1:02d}"
+            session_completed_at = base_now - pd.Timedelta(days=(session_count - session_index - 1) * 3)
+            session_attempts = []
+            session_served_ids = set()
+            session_question_ids = []
+            session_answers = []
+            session_question_reviews = []
+            session_question_snapshots = []
+            session_attempt_rows = []
+            session_score = 0.0
+            session_max_score = 0.0
+            session_duration = 0
+            session_correct_answers = 0
+            session_questions_attempted = 0
+            planned_steps = max(6, int(SIMULATION_SESSION_LENGTH) + int(rng.integers(-2, 3)))
+
+            for step_number in range(1, planned_steps + 1):
+                recommendation = recommend_next_best_adaptive_question(
+                    student_elo=running_elo,
+                    question_bank_records=simulation_bank_records,
+                    graph=FULL_GRAPH,
+                    subject_id=session_subject_id,
+                    topic_id=None,
+                    current_question_id=session_attempts[-1]["questionId"] if session_attempts else None,
+                    constrain_to_topic=False,
+                    answered_question_ids=prior_answered_ids,
+                    session_question_ids=session_served_ids,
+                    session_attempts=session_attempts,
+                    hop_limit=3,
+                )
+
+                actual_question = recommendation.get("question")
+                if not actual_question:
+                    break
+
+                outcome = simulate_attempt_outcome(actual_question, running_elo, step_number, rng)
+                reasons_text = " | ".join(recommendation.get("reasons", []))
+                remediation_target = recommendation.get("graph", {}).get("remediationForQuestionId")
+
+                session_question_ids.append(actual_question["id"])
+                session_answers.append(outcome["answer"])
+                session_question_snapshots.append(dict(actual_question))
+                session_question_reviews.append(
+                    {
+                        "questionId": actual_question["id"],
+                        "correct": outcome["correct"],
+                        "timeSpentSeconds": int(outcome["time_spent_seconds"]),
+                        "rapidGuessWarning": bool(outcome["rapid_guess_warning"]),
+                        "rapidGuessThresholdSeconds": int(outcome["rapid_guess_threshold_seconds"]),
+                        "eloAdjustment": int(outcome["elo"]["adjustedGain"]),
+                        "warningText": outcome["warning_text"],
+                        "remediationForQuestionId": remediation_target,
+                    }
+                )
+
+                question_marks = float(actual_question.get("marks", 1) or 1)
+                question_negative = float(actual_question.get("negativeMarks", 0) or 0)
+                session_max_score += question_marks
+                session_duration += int(outcome["time_spent_seconds"])
+                if not is_unanswered_answer(outcome["answer"]):
+                    session_questions_attempted += 1
+                if outcome["correct"]:
+                    session_correct_answers += 1
+                    session_score += question_marks
+                elif not is_unanswered_answer(outcome["answer"]):
+                    session_score -= question_negative
+
+                attempt_row = {
+                    "test_id": session_id,
+                    "test_type": "adaptive",
+                    "completed_at": session_completed_at,
+                    "subject_id": session_subject_id,
+                    "topic_id": actual_question.get("topicId"),
+                    "score": np.nan,
+                    "max_score": np.nan,
+                    "step_number": step_number,
+                    "question_id": actual_question["id"],
+                    "question_text": actual_question.get("question"),
+                    "question_type": actual_question.get("type"),
+                    "difficulty": actual_question.get("difficulty"),
+                    "question_elo": float(actual_question.get("eloRating", 1400) or 1400),
+                    "marks": question_marks,
+                    "subjectId": actual_question.get("subjectId"),
+                    "topicId": actual_question.get("topicId"),
+                    "subjectName": get_subject_name(actual_question.get("subjectId")),
+                    "topicName": get_topic_name(actual_question.get("subjectId"), actual_question.get("topicId")),
+                    "answer": outcome["answer"],
+                    "answer_state": "correct" if outcome["correct"] else "wrong",
+                    "answered": not is_unanswered_answer(outcome["answer"]),
+                    "correct": bool(outcome["correct"]),
+                    "time_spent_seconds": int(outcome["time_spent_seconds"]),
+                    "rapid_guess_warning": bool(outcome["rapid_guess_warning"]),
+                    "rapid_guess_threshold_seconds": int(outcome["rapid_guess_threshold_seconds"]),
+                    "elo_adjustment": int(outcome["elo"]["adjustedGain"]),
+                    "warning_text": outcome["warning_text"],
+                    "remediation_for_question_id": remediation_target,
+                }
+                session_attempt_rows.append(attempt_row)
+
+                if session_index == session_count - 1:
+                    ranked_candidates = recommendation.get("ranked_candidates", [])
+                    for rank, candidate_info in enumerate(ranked_candidates[:8], start=1):
+                        candidate = candidate_info["candidate"]
+                        candidate_rows.append(
+                            {
+                                "test_id": session_id,
+                                "step_number": step_number,
+                                "rank": rank,
+                                "candidate_question_id": candidate.get("id"),
+                                "candidate_subject": candidate.get("subjectId"),
+                                "candidate_topic": candidate.get("topicId"),
+                                "candidate_difficulty": candidate.get("difficulty"),
+                                "candidate_elo": candidate.get("eloRating"),
+                                "heuristic_score": round(candidate_info.get("heuristicScore", 0), 4),
+                                "graph_boost": round(candidate_info.get("graphBoost", 0), 4),
+                                "combined_score": round(candidate_info.get("combinedScore", 0), 4),
+                                "graph_edge_kind": candidate_info.get("graphEdge", {}).get("kind")
+                                if candidate_info.get("graphEdge")
+                                else None,
+                                "graph_edge_weight": candidate_info.get("graphEdge", {}).get("weight")
+                                if candidate_info.get("graphEdge")
+                                else None,
+                                "hop_distance": candidate_info.get("hopDistance"),
+                                "selected": candidate.get("id") == actual_question.get("id"),
+                            }
+                        )
+
+                    selected_step_rows.append(
+                        {
+                            "test_id": session_id,
+                            "completed_at": session_completed_at,
+                            "step_number": step_number,
+                            "student_elo_before_step": round(running_elo, 2),
+                            "actual_question_id": actual_question["id"],
+                            "actual_question_text": actual_question.get("question"),
+                            "actual_subject": get_subject_name(actual_question.get("subjectId")),
+                            "actual_topic": get_topic_name(actual_question.get("subjectId"), actual_question.get("topicId")),
+                            "actual_difficulty": actual_question.get("difficulty"),
+                            "actual_question_elo": float(actual_question.get("eloRating", 1400) or 1400),
+                            "answered": not is_unanswered_answer(outcome["answer"]),
+                            "correct": bool(outcome["correct"]),
+                            "time_spent_seconds": int(outcome["time_spent_seconds"]),
+                            "rapid_guess_warning": bool(outcome["rapid_guess_warning"]),
+                            "rapid_guess_threshold_seconds": int(outcome["rapid_guess_threshold_seconds"]),
+                            "recommended_question_id": actual_question["id"],
+                            "recommended_question_text": actual_question.get("question"),
+                            "recommended_matches_actual": True,
+                            "target_elo": recommendation.get("targetElo"),
+                            "target_difficulty": recommendation.get("targetDifficulty"),
+                            "momentum": recommendation.get("momentum"),
+                            "reward_signal": recommendation.get("rewardSignal"),
+                            "graph_mode": recommendation.get("graph", {}).get("mode")
+                            if recommendation.get("graph")
+                            else None,
+                            "graph_from_question_id": recommendation.get("graph", {}).get("fromQuestionId")
+                            if recommendation.get("graph")
+                            else None,
+                            "graph_edge_kind": recommendation.get("graph", {}).get("edgeKind")
+                            if recommendation.get("graph")
+                            else None,
+                            "graph_edge_weight": recommendation.get("graph", {}).get("edgeWeight")
+                            if recommendation.get("graph")
+                            else None,
+                            "graph_hop_distance": recommendation.get("graph", {}).get("hopDistance")
+                            if recommendation.get("graph")
+                            else None,
+                            "graph_neighbor_count": recommendation.get("graph", {}).get("neighborCount")
+                            if recommendation.get("graph")
+                            else None,
+                            "remediation_for_question_id": remediation_target,
+                            "reasons": reasons_text,
+                        }
+                    )
+
+                if not is_unanswered_answer(outcome["answer"]):
+                    prior_answered_ids.add(actual_question["id"])
+                session_served_ids.add(actual_question["id"])
+                session_attempts.append(
+                    {
+                        "questionId": actual_question["id"],
+                        "topicId": actual_question.get("topicId"),
+                        "difficulty": actual_question.get("difficulty"),
+                        "eloRating": float(actual_question.get("eloRating", 1400) or 1400),
+                        "correct": bool(outcome["correct"]),
+                        "rapidGuessWarning": bool(outcome["rapid_guess_warning"]),
+                        "remediationForQuestionId": remediation_target,
+                    }
+                )
+                running_elo += outcome["elo"]["adjustedGain"]
+
+            if not session_attempt_rows:
+                continue
+
+            for row in session_attempt_rows:
+                row["score"] = round(session_score, 2)
+                row["max_score"] = round(session_max_score, 2)
+
+            attempt_rows.extend(session_attempt_rows)
+            history_rows.append(
+                {
+                    "id": session_id,
+                    "user_id": STUDENT_ID,
+                    "test_type": "adaptive",
+                    "subject_id": session_subject_id,
+                    "topic_id": None,
+                    "score": round(session_score, 2),
+                    "max_score": round(session_max_score, 2),
+                    "correct_answers": int(session_correct_answers),
+                    "total_questions": int(len(session_question_ids)),
+                    "questions_attempted": int(session_questions_attempted),
+                    "violations": 0,
+                    "duration_seconds": int(session_duration),
+                    "completed_at": session_completed_at,
+                    "review_payload": {
+                        "attemptKind": "adaptive-simulated",
+                        "question_ids": session_question_ids,
+                        "answers": session_answers,
+                        "question_reviews": session_question_reviews,
+                        "question_snapshots": session_question_snapshots,
+                        "reviewMetadata": {
+                            "attemptDuration": int(session_duration),
+                            "simulated": True,
+                            "generatedFrom": "adaptive-engine-fallback",
+                        },
+                    },
+                }
+            )
+
+        simulated_history_df = pd.DataFrame(history_rows)
+        simulated_attempts_df = pd.DataFrame(attempt_rows)
+
+        if not simulated_history_df.empty:
+            simulated_history_df["accuracy_pct"] = np.where(
+                simulated_history_df["total_questions"] > 0,
+                100 * simulated_history_df["correct_answers"] / simulated_history_df["total_questions"],
+                np.nan,
+            )
+            simulated_history_df["score_pct"] = np.where(
+                simulated_history_df["max_score"] > 0,
+                100 * simulated_history_df["score"] / simulated_history_df["max_score"],
+                np.nan,
+            )
+
+            simulation_sessions_df = simulated_history_df[
+                [
+                    column
+                    for column in [
+                        "id",
+                        "completed_at",
+                        "subject_id",
+                        "topic_id",
+                        "score",
+                        "max_score",
+                        "correct_answers",
+                        "total_questions",
+                        "duration_seconds",
+                        "accuracy_pct",
+                    ]
+                    if column in simulated_history_df.columns
+                ]
+            ].copy()
+            selected_session_id = simulated_history_df.sort_values(["completed_at", "id"]).iloc[-1]["id"]
+            selected_session_steps_df = (
+                simulated_attempts_df[simulated_attempts_df["test_id"] == selected_session_id]
+                .sort_values(["step_number", "question_id"])
+                .reset_index(drop=True)
+            )
+            simulation_steps_df = pd.DataFrame(selected_step_rows)
+            simulation_candidates_df = pd.DataFrame(candidate_rows)
+
+            if test_history_df.empty and student_question_timeline_df.empty:
+                refresh_simulated_progress_tables(simulated_history_df, simulated_attempts_df)
+
+            all_adaptive_steps_df = simulated_attempts_df.sort_values(
+                ["completed_at", "test_id", "step_number"]
+            ).reset_index(drop=True)
+            forecast_attempts = []
+            forecast_answered_ids = set(
+                all_adaptive_steps_df[all_adaptive_steps_df["answered"] == True]["question_id"]
+                .dropna()
+                .astype(str)
+                .tolist()
+            )
+            forecast_served_ids = set()
+            forecast_running_elo = float(running_elo)
+
+            for row in all_adaptive_steps_df.itertuples(index=False):
+                forecast_attempts.append(
+                    {
+                        "questionId": row.question_id,
+                        "topicId": row.topicId,
+                        "difficulty": row.difficulty,
+                        "eloRating": row.question_elo if pd.notna(row.question_elo) else 1400,
+                        "correct": bool(row.correct),
+                        "rapidGuessWarning": bool(row.rapid_guess_warning),
+                        "remediationForQuestionId": row.remediation_for_question_id,
+                    }
+                )
+
+            future_rows = []
+            for future_step in range(1, SIMULATION_STEPS_AHEAD + 1):
+                recommendation = recommend_next_best_adaptive_question(
+                    student_elo=forecast_running_elo if forecast_attempts else current_elo,
+                    question_bank_records=simulation_bank_records,
+                    graph=FULL_GRAPH,
+                    subject_id=session_subject_id,
+                    topic_id=None,
+                    current_question_id=forecast_attempts[-1]["questionId"] if forecast_attempts else None,
+                    constrain_to_topic=False,
+                    answered_question_ids=forecast_answered_ids,
+                    session_question_ids=forecast_served_ids,
+                    session_attempts=forecast_attempts,
+                    hop_limit=3,
+                )
+                future_question = recommendation.get("question")
+                if not future_question:
+                    break
+
+                future_rows.append(
+                    {
+                        "forecast_step": future_step,
+                        "question_id": future_question.get("id"),
+                        "subject": get_subject_name(future_question.get("subjectId")),
+                        "topic": get_topic_name(future_question.get("subjectId"), future_question.get("topicId")),
+                        "difficulty": future_question.get("difficulty"),
+                        "question_elo": future_question.get("eloRating"),
+                        "target_elo": recommendation.get("targetElo"),
+                        "target_difficulty": recommendation.get("targetDifficulty"),
+                        "momentum": recommendation.get("momentum"),
+                        "graph_mode": recommendation.get("graph", {}).get("mode")
+                        if recommendation.get("graph")
+                        else None,
+                        "graph_edge_kind": recommendation.get("graph", {}).get("edgeKind")
+                        if recommendation.get("graph")
+                        else None,
+                        "graph_hop_distance": recommendation.get("graph", {}).get("hopDistance")
+                        if recommendation.get("graph")
+                        else None,
+                        "reasons": " | ".join(recommendation.get("reasons", [])),
+                    }
+                )
+
+                forecast_served_ids.add(future_question["id"])
+                forecast_answered_ids.add(future_question["id"])
+                forecast_attempts.append(
+                    {
+                        "questionId": future_question["id"],
+                        "topicId": future_question.get("topicId"),
+                        "difficulty": future_question.get("difficulty"),
+                        "eloRating": future_question.get("eloRating", 1400),
+                        "correct": True,
+                        "rapidGuessWarning": False,
+                        "remediationForQuestionId": recommendation.get("graph", {}).get("remediationForQuestionId"),
+                    }
+                )
+                forecast_running_elo += get_standard_elo_gain(
+                    forecast_running_elo,
+                    future_question.get("eloRating", 1400),
+                )
+
+            future_recommendations_df = pd.DataFrame(future_rows)
+            simulation_summary_df = pd.DataFrame(
+                [
+                    {
+                        "data_source": "synthetic",
+                        "selected_session_id": selected_session_id,
+                        "simulation_bank_mode": SIMULATION_BANK_MODE,
+                        "simulation_start_elo": SIMULATION_START_ELO,
+                        "simulation_subject_id": session_subject_id,
+                        "simulated_sessions": int(len(simulated_history_df)),
+                        "session_steps": len(simulation_steps_df),
+                        "recommended_matches_actual_pct": 100.0 if not simulation_steps_df.empty else np.nan,
+                        "session_accuracy_pct": round(
+                            100 * simulation_steps_df["correct"].fillna(False).mean(), 2
+                        )
+                        if not simulation_steps_df.empty
+                        else np.nan,
+                    }
+                ]
+            )
+
+            display(simulation_summary_df)
+            display(simulation_sessions_df)
+            display(simulation_steps_df)
+            display(simulation_candidates_df.head(80))
+            display(future_recommendations_df)
+        else:
+            print("Simulation fallback did not produce any adaptive steps.")
 else:
     adaptive_history_df = adaptive_history_df.sort_values(["completed_at", "id"]).reset_index(drop=True)
     simulation_sessions_df = adaptive_history_df[
         [
-            "id",
-            "completed_at",
-            "subject_id",
-            "topic_id",
-            "score",
-            "max_score",
-            "correct_answers",
-            "total_questions",
-            "duration_seconds",
+            column
+            for column in [
+                "id",
+                "completed_at",
+                "subject_id",
+                "topic_id",
+                "derived_subject_scope",
+                "derived_topic_scope",
+                "score",
+                "max_score",
+                "correct_answers",
+                "total_questions",
+                "duration_seconds",
+            ]
+            if column in adaptive_history_df.columns
         ]
     ].copy()
     display(simulation_sessions_df)
 
-    if SIMULATION_TEST_ID and SIMULATION_TEST_ID in set(adaptive_history_df["id"]):
+    replayable_history_df = adaptive_history_df[
+        adaptive_history_df["id"].astype(str).isin(set(live_replay_session_ids))
+    ].copy()
+
+    if replayable_history_df.empty:
+        print(
+            "Adaptive session rows exist, but none of them contains reconstructable per-question timeline data. "
+            "Use simulation fallback or inspect review_payload population in test_history."
+        )
+        selected_session_id = None
+    elif SIMULATION_TEST_ID and SIMULATION_TEST_ID in set(replayable_history_df["id"].astype(str)):
         selected_session_id = SIMULATION_TEST_ID
     else:
-        selected_session_id = adaptive_history_df.iloc[-1]["id"]
+        selected_session_id = replayable_history_df.iloc[-1]["id"]
 
-    selected_session_row = adaptive_history_df[adaptive_history_df["id"] == selected_session_id].iloc[0]
-    selected_session_steps_df = (
-        student_question_timeline_df[student_question_timeline_df["test_id"] == selected_session_id]
-        .sort_values(["step_number", "question_id"])
-        .reset_index(drop=True)
+    if selected_session_id is None:
+        selected_session_row = None
+        selected_session_steps_df = pd.DataFrame(columns=QUESTION_TIMELINE_COLUMNS)
+    else:
+        selected_session_row = replayable_history_df[replayable_history_df["id"] == selected_session_id].iloc[0]
+        selected_session_steps_df = (
+            student_question_timeline_df[student_question_timeline_df["test_id"] == selected_session_id]
+            .sort_values(["step_number", "question_id"])
+            .reset_index(drop=True)
+        )
+
+    prior_attempts_df = (
+        student_question_timeline_df[
+            (student_question_timeline_df["completed_at"] < selected_session_row["completed_at"])
+            & (student_question_timeline_df["answered"] == True)
+        ].copy()
+        if selected_session_row is not None
+        else pd.DataFrame(columns=QUESTION_TIMELINE_COLUMNS)
     )
-
-    prior_attempts_df = student_question_timeline_df[
-        (student_question_timeline_df["completed_at"] < selected_session_row["completed_at"])
-        & (student_question_timeline_df["answered"] == True)
-    ].copy()
     prior_answered_ids = set(prior_attempts_df["question_id"].tolist())
 
     if SIMULATION_BANK_MODE == "live":
@@ -1883,8 +2769,19 @@ else:
     else:
         simulation_bank_df = question_bank_full.copy()
 
-    if pd.notna(selected_session_row["subject_id"]) and str(selected_session_row["subject_id"]).strip():
+    if (
+        selected_session_row is not None
+        and pd.notna(selected_session_row["subject_id"])
+        and str(selected_session_row["subject_id"]).strip()
+    ):
         session_subject_id = str(selected_session_row["subject_id"])
+    elif not selected_session_steps_df.empty:
+        subject_candidates = [
+            str(value).strip()
+            for value in selected_session_steps_df["subjectId"].dropna().tolist()
+            if str(value).strip()
+        ]
+        session_subject_id = subject_candidates[0] if len(set(subject_candidates)) == 1 else None
     else:
         session_subject_id = None
 
@@ -2167,26 +3064,188 @@ try:
 except Exception:
     betweenness_map = {node_id: 0 for node_id in graph_nx.nodes}
 
+def parse_activity_metadata(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return {}
+        try:
+            return json.loads(text)
+        except Exception:
+            return {}
+    return {}
+
+
+def build_graph_path_details(metadata, fallback_steps_df=None):
+    metadata = metadata or {}
+    raw_path = metadata.get("question_path") or metadata.get("questionPath") or []
+    raw_steps = metadata.get("steps") if isinstance(metadata.get("steps"), list) else []
+    path_question_ids = []
+    path_step_map = {}
+    node_state_map = {}
+    ordered_steps = []
+
+    if raw_steps:
+        for index, raw_step in enumerate(raw_steps, start=1):
+            if not isinstance(raw_step, dict):
+                continue
+            question_id = raw_step.get("question_id") or raw_step.get("questionId")
+            if not question_id:
+                continue
+            step_order = raw_step.get("order", index)
+            try:
+                step_order = int(step_order)
+            except Exception:
+                step_order = index
+            ordered_steps.append(
+                {
+                    "order": step_order,
+                    "question_id": question_id,
+                    "correct": raw_step.get("correct"),
+                }
+            )
+        ordered_steps = sorted(ordered_steps, key=lambda item: item["order"])
+        for step in ordered_steps:
+            question_id = step["question_id"]
+            path_question_ids.append(question_id)
+            path_step_map[question_id] = int(step["order"])
+            if step["correct"] is True:
+                node_state_map[question_id] = "correct"
+            elif step["correct"] is False:
+                node_state_map[question_id] = "wrong"
+            else:
+                node_state_map[question_id] = "pending"
+    elif raw_path:
+        for index, question_id in enumerate([item for item in raw_path if item], start=1):
+            path_question_ids.append(question_id)
+            path_step_map[question_id] = index
+            node_state_map[question_id] = "pending"
+    elif fallback_steps_df is not None and not fallback_steps_df.empty:
+        for index, row in enumerate(fallback_steps_df.sort_values("step_number").itertuples(index=False), start=1):
+            question_id = getattr(row, "actual_question_id", None) or getattr(row, "question_id", None)
+            if not question_id:
+                continue
+            path_question_ids.append(question_id)
+            path_step_map[question_id] = int(getattr(row, "step_number", index))
+            if getattr(row, "correct", None) is True:
+                node_state_map[question_id] = "correct"
+            elif getattr(row, "correct", None) is False:
+                node_state_map[question_id] = "wrong"
+            else:
+                node_state_map[question_id] = "pending"
+            ordered_steps.append(
+                {
+                    "order": int(getattr(row, "step_number", index)),
+                    "question_id": question_id,
+                    "correct": getattr(row, "correct", None),
+                }
+            )
+
+    current_question_id = metadata.get("current_question_id") or metadata.get("currentQuestionId")
+    if current_question_id and current_question_id not in path_step_map:
+        path_question_ids.append(current_question_id)
+        path_step_map[current_question_id] = len(path_question_ids)
+    if current_question_id and node_state_map.get(current_question_id) not in {"correct", "wrong"}:
+        node_state_map[current_question_id] = "current"
+
+    return {
+        "path_question_ids": path_question_ids,
+        "path_step_map": path_step_map,
+        "node_state_map": node_state_map,
+        "ordered_steps": ordered_steps,
+        "current_question_id": current_question_id,
+        "status": metadata.get("status"),
+    }
+
+
+def build_path_edges_df(path_question_ids):
+    rows = []
+    for index in range(1, len(path_question_ids)):
+        left = path_question_ids[index - 1]
+        right = path_question_ids[index]
+        edge = get_question_graph_edge(left, right, FULL_GRAPH) or get_question_graph_edge(right, left, FULL_GRAPH)
+        rows.append(
+            {
+                "sourceId": left,
+                "targetId": right,
+                "edge_kind": edge.get("kind") if edge else None,
+                "edge_weight": edge.get("weight") if edge else None,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+graph_activity_df = pd.DataFrame()
+if not activity_df.empty and "event_type" in activity_df.columns:
+    graph_activity_df = activity_df[
+        activity_df["event_type"].isin(["graph_path_progress", "graph_path_completed"])
+    ].copy()
+    if not graph_activity_df.empty:
+        graph_activity_df["metadata_parsed"] = graph_activity_df["metadata"].apply(parse_activity_metadata)
+        graph_activity_df = graph_activity_df.sort_values(["created_at", "id"]).reset_index(drop=True)
+
+latest_graph_event = graph_activity_df.iloc[-1].to_dict() if not graph_activity_df.empty else {}
+latest_graph_metadata = latest_graph_event.get("metadata_parsed", {}) if latest_graph_event else {}
+live_path_details = build_graph_path_details(latest_graph_metadata, simulation_steps_df)
+
 latest_outcome_by_question = {}
+attempt_history_question_ids = []
+attempt_history_seen = set()
+
+
+def register_attempt(question_id, correct=None):
+    if not question_id:
+        return
+    if question_id not in attempt_history_seen:
+        attempt_history_seen.add(question_id)
+        attempt_history_question_ids.append(question_id)
+    if correct is True:
+        latest_outcome_by_question[question_id] = "correct"
+    elif correct is False:
+        latest_outcome_by_question[question_id] = "wrong"
+
+
 if not question_attempts_df.empty:
     for row in question_attempts_df.sort_values(["completed_at", "step_number"]).itertuples(index=False):
         if not row.answered:
             continue
-        latest_outcome_by_question[row.question_id] = "correct" if row.correct else "wrong"
+        register_attempt(row.question_id, bool(row.correct))
 
-path_step_map = {}
-path_question_ids = []
+question_answer_events_df = pd.DataFrame()
+if not activity_df.empty and "event_type" in activity_df.columns:
+    question_answer_events_df = activity_df[activity_df["event_type"] == "question_answered"].copy()
+    if not question_answer_events_df.empty:
+        question_answer_events_df["metadata_parsed"] = question_answer_events_df["metadata"].apply(parse_activity_metadata)
+        question_answer_events_df = question_answer_events_df.sort_values(["created_at", "id"]).reset_index(drop=True)
+        for row in question_answer_events_df.itertuples(index=False):
+            metadata = getattr(row, "metadata_parsed", {}) or {}
+            question_id = getattr(row, "question_id", None) or metadata.get("question_id") or metadata.get("questionId")
+            was_correct = metadata.get("was_correct")
+            register_attempt(question_id, was_correct)
+
+if not answered_df.empty:
+    answered_fallback_df = answered_df.copy()
+    if "answered_at" in answered_fallback_df.columns:
+        answered_fallback_df = answered_fallback_df.sort_values(["answered_at", "question_id"])
+    for row in answered_fallback_df.itertuples(index=False):
+        register_attempt(getattr(row, "question_id", None), getattr(row, "was_correct", None))
+
+for step in live_path_details["ordered_steps"]:
+    if step.get("correct") is None:
+        continue
+    register_attempt(step.get("question_id"), step.get("correct"))
+
 if not simulation_steps_df.empty:
     for row in simulation_steps_df.itertuples(index=False):
-        path_step_map[row.actual_question_id] = int(row.step_number)
-        path_question_ids.append(row.actual_question_id)
+        if getattr(row, "answered", False):
+            register_attempt(getattr(row, "actual_question_id", None), getattr(row, "correct", None))
 
 graph_nodes_rows = []
 for question in question_bank_full.to_dict("records"):
     node_id = question["id"]
     x, y = pos.get(node_id, (0, 0))
-    status = latest_outcome_by_question.get(node_id, "unseen")
-    path_step = path_step_map.get(node_id)
     graph_nodes_rows.append(
         {
             "id": node_id,
@@ -2200,8 +3259,6 @@ for question in question_bank_full.to_dict("records"):
             "eloRating": float(question.get("eloRating", 1400)),
             "marks": float(question.get("marks", 1)),
             "type": question.get("type"),
-            "status": status,
-            "path_step": path_step,
             "degree": int(degree_map.get(node_id, 0)),
             "betweenness": float(betweenness_map.get(node_id, 0)),
             "question_text": question.get("question"),
@@ -2209,22 +3266,7 @@ for question in question_bank_full.to_dict("records"):
         }
     )
 
-graph_nodes_df = pd.DataFrame(graph_nodes_rows)
-
-path_edge_rows = []
-for index in range(1, len(path_question_ids)):
-    left = path_question_ids[index - 1]
-    right = path_question_ids[index]
-    edge = get_question_graph_edge(left, right, FULL_GRAPH) or get_question_graph_edge(right, left, FULL_GRAPH)
-    path_edge_rows.append(
-        {
-            "sourceId": left,
-            "targetId": right,
-            "edge_kind": edge.get("kind") if edge else None,
-            "edge_weight": edge.get("weight") if edge else None,
-        }
-    )
-path_edges_df = pd.DataFrame(path_edge_rows)
+base_graph_nodes_df = pd.DataFrame(graph_nodes_rows)
 
 
 def build_hover_text(row):
@@ -2244,104 +3286,136 @@ def build_hover_text(row):
     ]
     if pd.notna(row["path_step"]):
         lines.insert(1, f"Path step: {int(row['path_step'])}")
+    if bool(row.get("is_current")):
+        lines.insert(1, "Current live node: True")
     return "<br>".join(lines)
 
 
-graph_nodes_df["hover_text"] = graph_nodes_df.apply(build_hover_text, axis=1)
+def build_graph_nodes_df(node_state_map, path_question_ids, current_question_id=None):
+    graph_df = base_graph_nodes_df.copy()
+    path_step_map = {question_id: index for index, question_id in enumerate(path_question_ids, start=1)}
+    graph_df["status"] = graph_df["id"].map(node_state_map).fillna("unseen")
+    graph_df["path_step"] = graph_df["id"].map(path_step_map)
+    graph_df["is_current"] = graph_df["id"] == current_question_id if current_question_id else False
+    graph_df["hover_text"] = graph_df.apply(build_hover_text, axis=1)
+    return graph_df
 
-if PLOTLY_AVAILABLE and not graph_nodes_df.empty:
-    edge_x = []
-    edge_y = []
-    for edge in FULL_GRAPH["edges"]:
-        source = pos.get(edge["sourceId"])
-        target = pos.get(edge["targetId"])
-        if not source or not target:
-            continue
-        edge_x.extend([source[0], target[0], None])
-        edge_y.extend([source[1], target[1], None])
 
-    all_edge_trace = go.Scatter(
-        x=edge_x,
-        y=edge_y,
-        mode="lines",
-        line=dict(width=0.35, color="rgba(120, 138, 160, 0.18)"),
-        hoverinfo="skip",
-        name="Recommendation edges",
-    )
+def render_interactive_graph(graph_nodes_df, path_question_ids, title, note, output_html, path_label):
+    path_edges_df = build_path_edges_df(path_question_ids)
 
-    node_trace = go.Scatter(
-        x=graph_nodes_df["x"],
-        y=graph_nodes_df["y"],
-        mode="markers",
-        hoverinfo="text",
-        text=graph_nodes_df["hover_text"],
-        marker=dict(
-            size=np.clip(5 + graph_nodes_df["degree"] * 0.45, 5, 14),
-            color=graph_nodes_df["status"].map(STATUS_COLORS),
-            line=dict(width=np.where(graph_nodes_df["is_live_adaptive_eligible"], 1.2, 0.5), color="#f0f6fc"),
-            symbol=graph_nodes_df["difficulty"].map(DIFF_SYMBOL),
-            opacity=0.82,
-        ),
-        name="All questions",
-    )
-
-    path_edge_traces = []
-    for edge_kind, group_df in path_edges_df.groupby("edge_kind", dropna=False):
-        path_x = []
-        path_y = []
-        for item in group_df.itertuples(index=False):
-            source = pos.get(item.sourceId)
-            target = pos.get(item.targetId)
-            if not source or not target:
+    if PLOTLY_AVAILABLE and not graph_nodes_df.empty:
+        edge_x = []
+        edge_y = []
+        for edge in FULL_GRAPH["edges"]:
+            source = pos.get(edge["sourceId"])
+            target = pos.get(edge["targetId"])
+            if source is None or target is None:
                 continue
-            path_x.extend([source[0], target[0], None])
-            path_y.extend([source[1], target[1], None])
-        path_edge_traces.append(
-            go.Scatter(
-                x=path_x,
-                y=path_y,
-                mode="lines",
-                line=dict(width=2.8, color=EDGE_KIND_COLORS.get(edge_kind, "#79c0ff")),
-                hoverinfo="skip",
-                name=f"Student path: {edge_kind or 'unknown'}",
-            )
+            edge_x.extend([source[0], target[0], None])
+            edge_y.extend([source[1], target[1], None])
+
+        all_edge_trace = go.Scatter(
+            x=edge_x,
+            y=edge_y,
+            mode="lines",
+            line=dict(width=0.35, color="rgba(120, 138, 160, 0.18)"),
+            hoverinfo="skip",
+            name="Recommendation edges",
         )
 
-    path_nodes_df = graph_nodes_df[graph_nodes_df["path_step"].notna()].sort_values("path_step")
-    path_node_trace = go.Scatter(
-        x=path_nodes_df["x"],
-        y=path_nodes_df["y"],
-        mode="markers+text",
-        text=path_nodes_df["path_step"].astype(int).astype(str),
-        textposition="top center",
-        hoverinfo="text",
-        textfont=dict(color="#f0f6fc", size=11),
-        marker=dict(
-            size=18,
-            color="#1f6feb",
-            line=dict(width=2, color="#ffffff"),
-            opacity=0.95,
-        ),
-        name="Student adaptive path",
-        hovertext=path_nodes_df["hover_text"],
-    )
+        node_trace = go.Scatter(
+            x=graph_nodes_df["x"],
+            y=graph_nodes_df["y"],
+            mode="markers",
+            hoverinfo="text",
+            text=graph_nodes_df["hover_text"],
+            marker=dict(
+                size=np.clip(5 + graph_nodes_df["degree"] * 0.45, 5, 14),
+                color=graph_nodes_df["status"].map(STATUS_COLORS).fillna(STATUS_COLORS["unseen"]),
+                line=dict(width=np.where(graph_nodes_df["is_live_adaptive_eligible"], 1.2, 0.5), color="#f0f6fc"),
+                symbol=graph_nodes_df["difficulty"].map(DIFF_SYMBOL),
+                opacity=0.82,
+            ),
+            name="All questions",
+        )
 
-    figure = go.Figure(data=[all_edge_trace, node_trace, *path_edge_traces, path_node_trace])
-    figure.update_layout(
-        title="Full Question Graph With Student Adaptive Path Overlay",
-        width=1400,
-        height=900,
-        paper_bgcolor="#0d1117",
-        plot_bgcolor="#0d1117",
-        font=dict(color="#f0f6fc"),
-        hoverlabel=dict(bgcolor="#161b22", font=dict(color="#f0f6fc")),
-        xaxis=dict(showgrid=False, zeroline=False, visible=False),
-        yaxis=dict(showgrid=False, zeroline=False, visible=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-        margin=dict(l=10, r=10, t=60, b=10),
-    )
-    figure.show()
-else:
+        path_edge_traces = []
+        if not path_edges_df.empty:
+            for edge_kind, group_df in path_edges_df.groupby("edge_kind", dropna=False):
+                path_x = []
+                path_y = []
+                for item in group_df.itertuples(index=False):
+                    source = pos.get(item.sourceId)
+                    target = pos.get(item.targetId)
+                    if source is None or target is None:
+                        continue
+                    path_x.extend([source[0], target[0], None])
+                    path_y.extend([source[1], target[1], None])
+                path_edge_traces.append(
+                    go.Scatter(
+                        x=path_x,
+                        y=path_y,
+                        mode="lines",
+                        line=dict(width=2.8, color=EDGE_KIND_COLORS.get(edge_kind, "#79c0ff")),
+                        hoverinfo="skip",
+                        name=f"{path_label}: {edge_kind or 'unknown'}",
+                    )
+                )
+
+        path_nodes_df = graph_nodes_df[graph_nodes_df["path_step"].notna()].sort_values("path_step")
+        path_node_trace = go.Scatter(
+            x=path_nodes_df["x"],
+            y=path_nodes_df["y"],
+            mode="markers+text",
+            text=path_nodes_df["path_step"].astype(int).astype(str),
+            textposition="top center",
+            hoverinfo="text",
+            textfont=dict(color="#f0f6fc", size=11),
+            marker=dict(
+                size=np.where(path_nodes_df["is_current"], 22, 18),
+                color=path_nodes_df["status"].map(STATUS_COLORS).fillna("#1f6feb"),
+                line=dict(
+                    width=np.where(path_nodes_df["is_current"], 3, 2),
+                    color=np.where(path_nodes_df["is_current"], "#58a6ff", "#ffffff"),
+                ),
+                opacity=0.97,
+            ),
+            name=path_label,
+            hovertext=path_nodes_df["hover_text"],
+        )
+
+        figure = go.Figure(data=[all_edge_trace, node_trace, *path_edge_traces, path_node_trace])
+        figure.update_layout(
+            title=title,
+            width=1400,
+            height=900,
+            paper_bgcolor="#0d1117",
+            plot_bgcolor="#0d1117",
+            font=dict(color="#f0f6fc"),
+            hoverlabel=dict(bgcolor="#161b22", font=dict(color="#f0f6fc")),
+            xaxis=dict(showgrid=False, zeroline=False, visible=False),
+            yaxis=dict(showgrid=False, zeroline=False, visible=False),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            margin=dict(l=10, r=10, t=60, b=10),
+        )
+        figure.add_annotation(
+            x=0.01,
+            y=0.02,
+            xref="paper",
+            yref="paper",
+            xanchor="left",
+            yanchor="bottom",
+            showarrow=False,
+            text=note,
+            font=dict(color="#8b949e", size=12),
+            bgcolor="rgba(13,17,23,0.7)",
+        )
+        figure.write_html(output_html, include_plotlyjs="cdn")
+        print("Saved interactive student graph to:", output_html)
+        figure.show()
+        return
+
     vis_nodes = []
     for row in graph_nodes_df.itertuples(index=False):
         vis_nodes.append(
@@ -2355,8 +3429,8 @@ else:
                 "shape": "dot",
                 "size": 18 if pd.notna(row.path_step) else max(6, min(14, 5 + row.degree * 0.4)),
                 "color": {
-                    "background": "#1f6feb" if pd.notna(row.path_step) else STATUS_COLORS.get(row.status, "#8b949e"),
-                    "border": "#ffffff",
+                    "background": STATUS_COLORS.get(row.status, "#8b949e"),
+                    "border": "#58a6ff" if bool(row.is_current) else "#ffffff",
                 },
                 "font": {"color": "#f0f6fc", "size": 11},
             }
@@ -2373,6 +3447,7 @@ else:
                 "arrows": "to",
             }
         )
+    path_edges_df = build_path_edges_df(path_question_ids)
     for edge in path_edges_df.itertuples(index=False):
         vis_edges.append(
             {
@@ -2388,9 +3463,9 @@ else:
     html = f'''
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js"></script>
-<div style="background:#0d1117;border:1px solid #30363d;border-radius:18px;padding:16px;">
-  <div style="margin-bottom:10px;color:#f0f6fc;font-weight:700;font-size:18px;">Full Question Graph With Student Adaptive Path Overlay</div>
-  <div style="margin-bottom:10px;color:#8b949e;font-size:12px;">Step numbers label the selected adaptive session path. Hover any node for subject, topic, difficulty, ELO, status, and graph metrics.</div>
+<div style="background:#0d1117;border:1px solid #30363d;border-radius:18px;padding:16px;margin-bottom:16px;">
+  <div style="margin-bottom:10px;color:#f0f6fc;font-weight:700;font-size:18px;">{title}</div>
+  <div style="margin-bottom:10px;color:#8b949e;font-size:12px;">{note}</div>
   <div id="{container_id}" style="height:860px;border-radius:14px;background:#010409;"></div>
 </div>
 <script>
@@ -2408,7 +3483,66 @@ else:
 }})();
 </script>
 '''
+    output_html.write_text(html, encoding="utf-8")
+    print("Saved interactive student graph to:", output_html)
     display(HTML(html))
+
+
+live_graph_available = bool(latest_graph_metadata) and len(live_path_details["path_question_ids"]) > 0
+if live_graph_available:
+    current_graph_title = "Live Website Graph With Connected Student Attempt Path"
+    current_graph_note = (
+        "This graph is built from the latest graph_path_progress / graph_path_completed activity emitted by the website. "
+        "Answered nodes stay green or red, and the active in-progress node stays blue."
+    )
+elif simulation_data_source == "synthetic":
+    current_graph_title = "Full Question Graph With Simulated Student Adaptive Path Overlay"
+    current_graph_note = (
+        "Live adaptive graph activity was not visible, so this fallback shows the deterministic simulated path. "
+        "Answered path nodes are still colored green/red."
+    )
+else:
+    current_graph_title = "Full Question Graph With Student Adaptive Path Overlay"
+    current_graph_note = (
+        "Live graph activity was not visible, so this graph falls back to the latest reconstructable adaptive session path. "
+        "Answered nodes are colored green/red and step numbers show the connected traversal."
+    )
+
+current_graph_node_states = dict(latest_outcome_by_question)
+current_graph_node_states.update(live_path_details["node_state_map"])
+current_graph_nodes_df = build_graph_nodes_df(
+    current_graph_node_states,
+    live_path_details["path_question_ids"],
+    current_question_id=live_path_details["current_question_id"],
+)
+student_graph_html = ROOT / f"student_attempt_graph_{str(STUDENT_ID)[:8]}.html"
+render_interactive_graph(
+    current_graph_nodes_df,
+    live_path_details["path_question_ids"],
+    current_graph_title,
+    current_graph_note,
+    student_graph_html,
+    "Current connected path",
+)
+
+attempt_history_note = (
+    "This second graph connects every unique question attempted so far in chronological order across the student's visible website history. "
+    "Green means the latest visible outcome is correct, red means wrong."
+)
+attempt_history_graph_html = ROOT / f"student_attempt_history_graph_{str(STUDENT_ID)[:8]}.html"
+attempt_history_nodes_df = build_graph_nodes_df(
+    latest_outcome_by_question,
+    attempt_history_question_ids,
+    current_question_id=None,
+)
+render_interactive_graph(
+    attempt_history_nodes_df,
+    attempt_history_question_ids,
+    "Cumulative Attempt History Graph",
+    attempt_history_note,
+    attempt_history_graph_html,
+    "All attempted questions",
+)
 
 fig = plt.figure(figsize=(22, 18), facecolor="#0d1117")
 grid = GridSpec(3, 2, figure=fig, hspace=0.35, wspace=0.2)

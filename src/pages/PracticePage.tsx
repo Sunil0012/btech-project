@@ -8,7 +8,7 @@ import { useStudentAuth } from "@/contexts/AuthContext";
 import { visibleSubjects } from "@/data/subjects";
 import {
   getFullMockQuestions,
-  updateElo, Question,
+  updateElo, type Question,
 } from "@/data/questions";
 import {
   availableFullTests, getFullTestMeta, getFullTestQuestions, FullTestId,
@@ -25,7 +25,7 @@ import {
   getRapidGuessThresholdSeconds,
   type PracticeQuestionReview,
 } from "@/lib/practiceReview";
-import { buildTestReviewPayload } from "@/lib/testReview";
+import { buildTestReviewPayload, getReviewState, getQuestionForPayloadReview } from "@/lib/testReview";
 import {
   AlertTriangle, CheckCircle2, XCircle, ArrowRight,
   Play, Timer, Shield, BookOpen, Target, ChevronLeft, ChevronRight,
@@ -278,9 +278,9 @@ export default function PracticePage() {
 
         <div className="grid md:grid-cols-3 gap-6 mb-10">
           <ScrollReveal delay={0}>
-            <div className="bg-card border rounded-xl p-6 space-y-4 h-full min-h-[430px] flex flex-col">
-              <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center mb-4">
-                <Shield className="h-6 w-6 text-destructive" />
+            <div className="advanced-glass rounded-xl p-6 space-y-4 h-full min-h-[430px] flex flex-col advanced-card-hover">
+              <div className="h-12 w-12 rounded-xl bg-rose-500/10 flex items-center justify-center mb-4 ring-1 ring-rose-500/20">
+                <Shield className="h-6 w-6 text-rose-500" />
               </div>
               <h3 className="font-semibold text-lg mb-1">Full GATE Paper</h3>
               <p className="text-sm text-muted-foreground mb-3">
@@ -318,9 +318,9 @@ export default function PracticePage() {
           </ScrollReveal>
 
           <ScrollReveal delay={80}>
-            <div className="bg-card border rounded-xl p-6 space-y-4 h-full min-h-[430px] flex flex-col">
-              <div className="h-12 w-12 rounded-xl bg-accent/10 flex items-center justify-center">
-                <Target className="h-6 w-6 text-accent" />
+            <div className="advanced-glass rounded-xl p-6 space-y-4 h-full min-h-[430px] flex flex-col advanced-card-hover">
+              <div className="h-12 w-12 rounded-xl bg-amber-500/10 flex items-center justify-center ring-1 ring-amber-500/20">
+                <Target className="h-6 w-6 text-amber-500" />
               </div>
               <h3 className="font-semibold text-lg">Topic-wise Test</h3>
               <p className="text-sm text-muted-foreground">Practice specific topics with a custom timer.</p>
@@ -369,9 +369,9 @@ export default function PracticePage() {
           </ScrollReveal>
 
           <ScrollReveal delay={160}>
-            <div className="bg-card border rounded-xl p-6 space-y-4 h-full min-h-[430px] flex flex-col">
-              <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-                <BookOpen className="h-6 w-6 text-primary" />
+            <div className="advanced-glass rounded-xl p-6 space-y-4 h-full min-h-[430px] flex flex-col advanced-card-hover">
+              <div className="h-12 w-12 rounded-xl bg-indigo-500/10 flex items-center justify-center ring-1 ring-indigo-500/20">
+                <BookOpen className="h-6 w-6 text-indigo-500" />
               </div>
               <h3 className="font-semibold text-lg">Adaptive Practice (Advanced)</h3>
               <p className="text-sm text-muted-foreground">Each next question is recommended live using your ELO, streak, weak topics, and recent answers.</p>
@@ -417,7 +417,7 @@ export default function PracticePage() {
                   value={adaptiveQuestionCount}
                   onChange={(e) => setAdaptiveQuestionCount(parseInt(e.target.value))}
                 >
-                  {[10, 20, 30].map((count) => (
+                  {(adaptiveType === "subject-wise" ? [10, 20, 30] : [30, 40, 50, 65]).map((count) => (
                     <option key={count} value={count}>{count} questions (~{count * 3} min)</option>
                   ))}
                 </select>
@@ -567,7 +567,12 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
     };
 
     const handleBlur = () => {
-      registerFocusLossViolation("The full mock test lost focus. Switching tabs, using floating windows, or minimizing is not allowed.");
+      // Small delay for blur to ignore quick blurs (like system notifications or clicking browser UI)
+      setTimeout(() => {
+        if (!document.hasFocus() && !document.hidden && examStarted && !finished) {
+          registerFocusLossViolation("The full mock test lost focus. Switching tabs, using floating windows, or minimizing is not allowed.");
+        }
+      }, 2000);
     };
 
     const handleFocus = () => {
@@ -693,6 +698,13 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
       violations: finalViolations,
       duration_seconds: attemptDurationSeconds,
       review_payload: testReviewPayload,
+    }).catch((error: any) => {
+      console.error("Error saving full mock test:", error);
+      let msg = error?.message || "Failed to save test history. Please try again.";
+      if (msg.toLowerCase().includes("jwt expired")) {
+        msg = "Your session has expired. Please DO NOT refresh. Sign out in a new tab, sign in, then come back and click submit again.";
+      }
+      alert("Submission Error: " + msg);
     });
 
     if (finalRiskFinish) {
@@ -713,6 +725,9 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
     timeLeft,
     updateSubjectScore,
     violations,
+    testId,
+    answers,
+    fullTestMeta,
   ]);
 
   useEffect(() => {
@@ -985,7 +1000,7 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
 
       <OfficialGateExamShell
         fullTestMeta={fullTestMeta}
-        question={q}
+        question={questions[currentIdx]}
         currentQuestionNumber={currentQuestionNumber}
         currentSection={currentSection}
         aptitudeCount={aptitudeCount}
@@ -1011,7 +1026,7 @@ function GateStyleMockTest({ testId }: { testId: FullTestId }) {
         onSetAnswer={setAnswer}
         onShowPaletteChange={setShowPalette}
         onPrevious={() => setCurrentIdx((i) => i - 1)}
-        onClearResponse={() => setAnswer(q.type === "msq" ? [] : q.type === "nat" ? "" : null)}
+        onClearResponse={() => setAnswer(questions[currentIdx].type === "msq" ? [] : questions[currentIdx].type === "nat" ? "" : null)}
         onMarkForReviewAndNext={handleMarkForReviewAndNext}
         onSaveAndNext={goToNextQuestion}
         onSubmit={submitTest}
@@ -1478,7 +1493,11 @@ function OfficialGateExamShell({
               <Button
                 variant="hero"
                 className="w-full bg-[#4da2d3] text-base font-semibold text-white hover:bg-[#3f8fbd]"
-                onClick={onSubmit}
+                onClick={() => {
+                  if (window.confirm("Are you sure you want to submit your test? This action cannot be undone.")) {
+                    onSubmit();
+                  }
+                }}
               >
                 Submit
               </Button>

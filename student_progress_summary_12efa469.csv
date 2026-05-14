@@ -1,0 +1,8 @@
+metric,value
+Data source,Demo fallback - replace STUDENT_ID/token for real private rows
+Sessions,7
+Attempts,84
+Correct,74
+Overall accuracy,88.1%
+Unique questions attempted,84
+Question-bank coverage,8.4%

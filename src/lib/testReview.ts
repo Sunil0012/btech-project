@@ -28,12 +28,44 @@ export interface QuestionSessionReviewPayload {
   remediationForQuestionId: string | null;
 }
 
+export interface GraphPathReviewStepPayload {
+  order: number;
+  question_id: string;
+  from_question_id?: string | null;
+  correct?: boolean | null;
+  difficulty?: Question["difficulty"] | null;
+  edge_weight?: number | null;
+  edge_kind?: string | null;
+  hop_distance?: number | null;
+  remediation_for_question_id?: string | null;
+  subject_id?: string | null;
+  topic_id?: string | null;
+  time_spent_seconds?: number | null;
+  rapid_guess_warning?: boolean | null;
+  rapid_guess_threshold_seconds?: number | null;
+  warning_text?: string | null;
+}
+
+export interface GraphPathReviewPayload {
+  session_id: string;
+  test_type: string;
+  subject_id?: string | null;
+  topic_id?: string | null;
+  total_questions: number;
+  answered_questions: number;
+  accuracy: number;
+  current_question_id?: string | null;
+  question_path: string[];
+  steps: GraphPathReviewStepPayload[];
+}
+
 export interface TestReviewPayload {
   full_test_id?: FullTestId | null;
   question_ids: string[];
   answers: PracticeAnswer[];
   question_snapshots?: ReviewQuestionSnapshot[];
   question_reviews?: QuestionSessionReviewPayload[];
+  graph_path?: GraphPathReviewPayload;
   attemptKind?: AttemptKind;
   countsForStats?: boolean;
   countsForRating?: boolean;
@@ -203,6 +235,113 @@ function parseObjectRecord(value: unknown): Record<string, any> | undefined {
   return value as Record<string, any>;
 }
 
+function parseGraphPathReviewPayload(value: unknown): GraphPathReviewPayload | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+
+  const graphPath = value as Record<string, unknown>;
+  const rawQuestionPath = graphPath.question_path ?? graphPath.questionPath;
+  const questionPath = Array.isArray(rawQuestionPath)
+    ? rawQuestionPath.filter((item): item is string => typeof item === "string")
+    : [];
+  const rawSteps = Array.isArray(graphPath.steps) ? graphPath.steps : [];
+  const steps = rawSteps
+    .map((item, index): GraphPathReviewStepPayload | null => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const step = item as Record<string, unknown>;
+      const questionId = step.question_id ?? step.questionId;
+      if (typeof questionId !== "string") return null;
+
+      return {
+        order: typeof step.order === "number" ? step.order : index + 1,
+        question_id: questionId,
+        from_question_id:
+          typeof step.from_question_id === "string"
+            ? step.from_question_id
+            : typeof step.fromQuestionId === "string"
+              ? step.fromQuestionId
+              : null,
+        correct: typeof step.correct === "boolean" ? step.correct : null,
+        difficulty: isDifficulty(step.difficulty) ? step.difficulty : null,
+        edge_weight: typeof step.edge_weight === "number" ? step.edge_weight : typeof step.edgeWeight === "number" ? step.edgeWeight : null,
+        edge_kind: typeof step.edge_kind === "string" ? step.edge_kind : typeof step.edgeKind === "string" ? step.edgeKind : null,
+        hop_distance: typeof step.hop_distance === "number" ? step.hop_distance : typeof step.hopDistance === "number" ? step.hopDistance : null,
+        remediation_for_question_id:
+          typeof step.remediation_for_question_id === "string"
+            ? step.remediation_for_question_id
+            : typeof step.remediationForQuestionId === "string"
+              ? step.remediationForQuestionId
+              : null,
+        subject_id: typeof step.subject_id === "string" ? step.subject_id : typeof step.subjectId === "string" ? step.subjectId : null,
+        topic_id: typeof step.topic_id === "string" ? step.topic_id : typeof step.topicId === "string" ? step.topicId : null,
+        time_spent_seconds:
+          typeof step.time_spent_seconds === "number"
+            ? step.time_spent_seconds
+            : typeof step.timeSpentSeconds === "number"
+              ? step.timeSpentSeconds
+              : null,
+        rapid_guess_warning:
+          typeof step.rapid_guess_warning === "boolean"
+            ? step.rapid_guess_warning
+            : typeof step.rapidGuessWarning === "boolean"
+              ? step.rapidGuessWarning
+              : null,
+        rapid_guess_threshold_seconds:
+          typeof step.rapid_guess_threshold_seconds === "number"
+            ? step.rapid_guess_threshold_seconds
+            : typeof step.rapidGuessThresholdSeconds === "number"
+              ? step.rapidGuessThresholdSeconds
+              : null,
+        warning_text:
+          typeof step.warning_text === "string"
+            ? step.warning_text
+            : typeof step.warningText === "string"
+              ? step.warningText
+              : null,
+      };
+    })
+    .filter((step): step is GraphPathReviewStepPayload => Boolean(step));
+
+  if (questionPath.length === 0 && steps.length === 0) return undefined;
+
+  return {
+    session_id:
+      typeof graphPath.session_id === "string"
+        ? graphPath.session_id
+        : typeof graphPath.sessionId === "string"
+          ? graphPath.sessionId
+          : "",
+    test_type:
+      typeof graphPath.test_type === "string"
+        ? graphPath.test_type
+        : typeof graphPath.testType === "string"
+          ? graphPath.testType
+          : "",
+    subject_id:
+      typeof graphPath.subject_id === "string"
+        ? graphPath.subject_id
+        : typeof graphPath.subjectId === "string"
+          ? graphPath.subjectId
+          : null,
+    topic_id:
+      typeof graphPath.topic_id === "string"
+        ? graphPath.topic_id
+        : typeof graphPath.topicId === "string"
+          ? graphPath.topicId
+          : null,
+    total_questions: typeof graphPath.total_questions === "number" ? graphPath.total_questions : questionPath.length,
+    answered_questions: typeof graphPath.answered_questions === "number" ? graphPath.answered_questions : 0,
+    accuracy: typeof graphPath.accuracy === "number" ? graphPath.accuracy : 0,
+    current_question_id:
+      typeof graphPath.current_question_id === "string"
+        ? graphPath.current_question_id
+        : typeof graphPath.currentQuestionId === "string"
+          ? graphPath.currentQuestionId
+          : null,
+    question_path: questionPath.length > 0 ? questionPath : steps.map((step) => step.question_id),
+    steps,
+  };
+}
+
 function buildSyntheticQuestionReview(question: Question, answer: PracticeAnswer): QuestionSessionReviewPayload {
   return {
     questionId: question.id,
@@ -224,6 +363,7 @@ export function parseTestReviewPayload(value: unknown): TestReviewPayload | null
   const rawQuestionSnapshots =
     payload.question_snapshots ?? payload.questionSnapshots ?? payload.questions_snapshot ?? payload.questionsSnapshot;
   const rawQuestionReviews = payload.question_reviews ?? payload.questionReviews;
+  const rawGraphPath = payload.graph_path ?? payload.graphPath;
   const rawWarningBreakdown = payload.warningBreakdown ?? payload.warning_breakdown;
   const rawReviewMetadata = payload.reviewMetadata ?? payload.review_metadata;
 
@@ -253,6 +393,7 @@ export function parseTestReviewPayload(value: unknown): TestReviewPayload | null
           .map((item) => coerceQuestionSessionReviewPayload(item))
           .filter((item): item is QuestionSessionReviewPayload => Boolean(item))
       : [],
+    graph_path: parseGraphPathReviewPayload(rawGraphPath),
     attemptKind:
       typeof payload.attemptKind === "string"
         ? payload.attemptKind
@@ -314,6 +455,7 @@ export function buildTestReviewPayload({
   countsForRating,
   warningBreakdown,
   reviewMetadata,
+  graphPath,
 }: {
   questions: Question[];
   answers: PracticeAnswer[];
@@ -324,6 +466,7 @@ export function buildTestReviewPayload({
   countsForRating?: boolean;
   warningBreakdown?: Record<string, any>;
   reviewMetadata?: Record<string, any>;
+  graphPath?: GraphPathReviewPayload;
 }): TestReviewPayload {
   // Ensure answers array matches questions length
   const normalizedAnswers = answers.length === questions.length 
@@ -344,6 +487,7 @@ export function buildTestReviewPayload({
       const explicitReview = questionReviewMap.get(question.id);
       return explicitReview ?? buildSyntheticQuestionReview(question, normalizedAnswers[index] ?? null);
     }),
+    graph_path: graphPath,
     attemptKind: attemptKind || undefined,
     countsForStats: countsForStats === true,
     countsForRating: countsForRating === true,

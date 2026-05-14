@@ -145,8 +145,8 @@ export const daMockPaper2Questions = [
   },
   {
     id: "daMock2-q12",
-    subjectId: "data-science-ai",
-    topicId: "probability",
+    subjectId: "probability-statistics",
+    topicId: "ps-probability",
     question: "Three fair dice are thrown independently. Let A be the event that the sum is at least 15 and B be the event that all dice show distinct numbers. What is P(A ∩ B)?",
     options: ["0", "1/36", "1/18", "5/36"],
     correctAnswer: 1,

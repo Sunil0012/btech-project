@@ -1,26 +1,18 @@
-% Compile with: pdflatex report.tex
-\documentclass[10pt,a4paper]{article}
-
-\usepackage[a4paper,margin=1in]{geometry}
-\usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}
-\usepackage{lmodern}
+% Compile with: pdflatex -interaction=nonstopmode -halt-on-error report.tex
+\documentclass[sigconf,authordraft,twoside]{acmart}
+%%
+%% \BibTeX command to typeset BibTeX logo in the docs
+\AtBeginDocument{%
+  \providecommand\BibTeX{{%
+    Bib\TeX}}}
 \usepackage{microtype}
-\usepackage{amsmath}
-\usepackage{amssymb}
 \usepackage{array}
 \usepackage{booktabs}
 \usepackage{enumitem}
-\usepackage{graphicx}
-\usepackage{hyperref}
-\usepackage{caption}
 \usepackage{subcaption}
+\usepackage{tabularx}
 \usepackage{tikz}
 \usepackage{pgfplots}
-\usepackage{titlesec}
-\usepackage{xcolor}
-\usepackage{fancyhdr}
-\usepackage{lastpage}
 \usepackage{float}
 
 \usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds,shapes.geometric}
@@ -41,29 +33,45 @@
   linkcolor=brandblue,
   urlcolor=brandblue,
   citecolor=brandblue,
+  bookmarksopen=true,
+  bookmarksnumbered=true,
+  plainpages=false,
+  pdfstartview=FitH,
   pdftitle={GATEWay - Comprehensive Technical Report},
-  pdfauthor={Technical Team},
+  pdfauthor={Khethavath Sunil Naik},
 }
 
-\titleformat{\section}{\Large\bfseries\color{brandblue}}{\thesection.}{0.5em}{}
-\titleformat{\subsection}{\large\bfseries\color{brandgreen}}{\thesubsection}{0.4em}{}
-\titleformat{\subsubsection}{\normalsize\bfseries\color{brandpurple}}{\thesubsubsection}{0.3em}{}
-
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{6pt}
+\setlength{\emergencystretch}{2em}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.12}
 \setlist[itemize]{leftmargin=*, itemsep=3pt, topsep=3pt}
 \setlist[enumerate]{leftmargin=*, itemsep=3pt, topsep=3pt}
 
-\newcommand{\tech}[1]{\texttt{\color{brandblue}#1}}
+\newcommand{\tech}[1]{\textcolor{brandblue}{\nolinkurl{#1}}}
 \newcommand{\project}{GATEWay}
 \newcommand{\formula}[1]{\textbf{\textit{#1}}}
+\newcommand{\reporttitle}{GATEWay: An Intelligent GATE DA Preparation Platform}
+\newcommand{\reportsubtitle}{With Advanced Recommendation Engines, Analytics, and Predictive Scoring}
+\newcommand{\reportauthorname}{Khethavath Sunil Naik \\ Dosapati Ashirvadhan}
+\newcommand{\reportrollnumber}{12341170}
+\newcommand{\reportprepared}{April 2026}
 
-% Header and Footer
-\pagestyle{fancy}
-\fancyhf{}
-\rhead{GATEWay - Technical Report}
-\lhead{\thepage/\pageref{LastPage}}
-\cfoot{Prepared: April 2026}
+\setcopyright{none}
+\acmConference[B.Tech Project Report]{B.Tech Project Report}{\reportprepared}{India}
+\acmBooktitle{B.Tech Project Report}
+\acmDOI{}
+\acmISBN{}
+\settopmatter{printacmref=false}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+
+\title[\project{}]{\reporttitle}
+\subtitle{\reportsubtitle}
+\author{\reportauthorname}
+\authornote{Roll Number: 12341170}
+\affiliation{%
+  \institution{B.Tech Project Report}
+}
+\renewcommand{\shortauthors}{\reportauthorname}
 
 \tikzset{
   flow/.style={
@@ -113,17 +121,7 @@
   group/.style={draw=linegray!60, dashed, rounded corners=6pt, inner sep=5pt}
 }
 
-\title{
-
-\Huge\textbf{\project}\\
-\Large An Intelligent GATE DA Preparation Platform\\
-\normalsize With Advanced Recommendation Engines, Analytics, and Predictive Scoring
-}
-\author{Khethavath Sunil Naik \\ 12341170}
-\date{\today}
-
 \begin{document}
-\maketitle
 
 \begin{abstract}
 \project{} is a sophisticated, classroom-aware educational intelligence platform designed specifically for GATE (Graduate Aptitude Test in Engineering) Data Analytics (DA) preparation. The system provides dual-mode experiences: a comprehensive student workspace for structured practice, adaptive testing, personalized coaching, and performance tracking, coupled with an advanced teacher command center for classroom orchestration, assignment management, learner monitoring, and intervention planning. 
@@ -131,9 +129,10 @@
 The platform's core innovation lies in its unified architecture that seamlessly integrates multiple specialized recommendation engines, a telemetry-driven analytics layer powered by Supabase, graph-based adaptive sequencing, intelligent rule-based coaching, comprehensive performance analytics, and a novel predictive scoring model. This report provides a detailed technical exposition of the complete system architecture, mathematical formulas underlying key recommendations, all data models, recommendation engine implementations, teacher analytics pipelines, and the comprehensive GATE score prediction formula with detailed variable explanations. The document spans multiple dimensions: product vision, system design, algorithmic foundations, implementation details, and research assets, making it suitable for technical portfolios, advanced project vivas, research presentations, and academic evaluation.
 \end{abstract}
 
-\newpage
-\tableofcontents
-\newpage
+\keywords{GATE DA, adaptive learning, recommendation systems, educational analytics, score prediction}
+
+\maketitle
+
 
 \section{Introduction and Problem Statement}
 
@@ -182,10 +181,11 @@ The platform answers four fundamental educational questions:
 \subsection{Architecture Overview}
 The platform is designed as a layered, multi-component ecosystem shown in Figure \ref{fig:architecture}.
 
-\begin{figure}[H]
+\begin{figure*}[t]
 \centering
+\resizebox{0.96\textwidth}{!}{%
 \begin{tikzpicture}[node distance=1.3cm and 1.8cm, scale=0.95, every node/.style={transform shape}]
-  % Define enhanced node styles with shadows
+  % Define node styles for the full-width architecture overview
   \tikzset{
     flowbox/.style={
       rectangle,
@@ -196,8 +196,7 @@ The platform is designed as a layered, multi-component ecosystem shown in Figure
       align=center,
       minimum height=0.95cm,
       minimum width=2.3cm,
-      font=\scriptsize\bfseries,
-      filter={drop shadow={shadow xshift=1pt, shadow yshift=-1pt, opacity=0.3}}
+      font=\scriptsize\bfseries
     },
     databox/.style={
       rectangle,
@@ -208,8 +207,7 @@ The platform is designed as a layered, multi-component ecosystem shown in Figure
       align=center,
       minimum height=1.0cm,
       minimum width=2.5cm,
-      font=\scriptsize\bfseries,
-      filter={drop shadow={shadow xshift=1pt, shadow yshift=-1pt, opacity=0.3}}
+      font=\scriptsize\bfseries
     },
     insightbox/.style={
       rectangle,
@@ -220,8 +218,7 @@ The platform is designed as a layered, multi-component ecosystem shown in Figure
       align=center,
       minimum height=0.95cm,
       minimum width=2.3cm,
-      font=\scriptsize\bfseries,
-      filter={drop shadow={shadow xshift=1pt, shadow yshift=-1pt, opacity=0.3}}
+      font=\scriptsize\bfseries
     },
     connectionline/.style={-{Latex[length=2.5mm]}, thick, draw=linegray!80},
     groupbox/.style={draw=linegray!50, dashed, rounded corners=8pt, inner sep=8pt, line width=1.2pt}
@@ -273,18 +270,19 @@ The platform is designed as a layered, multi-component ecosystem shown in Figure
   % Visual grouping boxes with labels
   \node[groupbox, fit=(studentui)(coach), label={[anchor=south, yshift=2pt]above:\textbf{\small\color{brandblue}Student Learning Intelligence Loop}}] {};
   \node[groupbox, fit=(teacherui)(insights), label={[anchor=south, yshift=2pt]above:\textbf{\small\color{brandpurple}Teacher Classroom Orchestration Loop}}] {};
-  \node[groupbox, fit=(public)(teacher), label={[anchor=north, yshift=-2pt]below:\textbf{\small\color{brandgreen}Unified Supabase Backend}}] {};
+\node[groupbox, fit=(public)(teacher), label={[anchor=north, yshift=-2pt]below:\textbf{\small\color{brandgreen}Unified Supabase Backend}}] {};
 
-\end{tikzpicture}
+\end{tikzpicture}%
+}
 \caption{High-level system architecture. Student and teacher loops operate independently but converge on unified data schemas (public and teacher) stored in Supabase. Analytics notebooks enable exploratory research.}\label{fig:architecture}
-\end{figure}
+\end{figure*}
 
 \subsection{Technology Stack}
 
-\begin{table}[H]
+\begin{table*}[t]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.2\columnwidth} >{\raggedright\arraybackslash}p{0.75\columnwidth}}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{0.22\textwidth} X}
 \toprule
 \textbf{Layer} & \textbf{Technologies} \\
 \midrule
@@ -304,9 +302,9 @@ Testing & Vitest for unit tests, Testing Library for components, Playwright for 
 Build Tools & Vite for fast bundling and development \\
 Research & Python (NetworkX, Pandas, NumPy, Matplotlib) for analytics notebooks \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Comprehensive technology stack across all layers.}
-\end{table}
+\end{table*}
 
 \subsection{Multi-Schema Data Modeling Philosophy}
 The architecture employs a single Supabase project with two exposed schemas, representing a critical design decision:
@@ -332,10 +330,10 @@ This separation:
 \subsubsection{profiles}
 Stores authenticated user information, preferences, and account metadata.
 
-\begin{table}[H]
+\begin{table}[t]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.25\columnwidth} >{\raggedright\arraybackslash}p{0.2\columnwidth} >{\raggedright\arraybackslash}p{0.5\columnwidth}}
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.24\columnwidth} >{\raggedright\arraybackslash}p{0.17\columnwidth} X}
 \toprule
 \textbf{Field} & \textbf{Type} & \textbf{Purpose} \\
 \midrule
@@ -348,17 +346,17 @@ theme & Text & User theme preference (light, dark) \\
 created\_at & Timestamp & Account creation date \\
 updated\_at & Timestamp & Last profile update \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Profile table structure for storing user accounts and preferences.}
 \end{table}
 
 \subsubsection{user\_progress}
 Tracks subject-level performance metrics for adaptive sequencing.
 
-\begin{table}[H]
+\begin{table}[t]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.25\columnwidth} >{\raggedright\arraybackslash}p{0.2\columnwidth} >{\raggedright\arraybackslash}p{0.5\columnwidth}}
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.24\columnwidth} >{\raggedright\arraybackslash}p{0.17\columnwidth} X}
 \toprule
 \textbf{Field} & \textbf{Type} & \textbf{Purpose} \\
 \midrule
@@ -369,17 +367,17 @@ questions\_answered & Integer & Total questions attempted \\
 weak\_topic & Text & Identified weak area for remediation \\
 updated\_at & Timestamp & Last update \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{User progress table tracking subject-level accuracy and weak areas.}
 \end{table}
 
 \subsubsection{answered\_questions}
 Records every question answer with full context for replay and analysis.
 
-\begin{table}[H]
+\begin{table}[t]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.25\columnwidth} >{\raggedright\arraybackslash}p{0.2\columnwidth} >{\raggedright\arraybackslash}p{0.5\columnwidth}}
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.24\columnwidth} >{\raggedright\arraybackslash}p{0.17\columnwidth} X}
 \toprule
 \textbf{Field} & \textbf{Type} & \textbf{Purpose} \\
 \midrule
@@ -392,17 +390,17 @@ time\_spent & Integer & Seconds elapsed (for rapid-guess detection) \\
 attempt\_number & Integer & Attempt count for retry tracking \\
 created\_at & Timestamp & Answer submission time \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Answered questions table for complete answer history.}
 \end{table}
 
 \subsubsection{test\_history}
 Aggregated test completion records with optional replay metadata.
 
-\begin{table}[H]
+\begin{table}[t]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.25\columnwidth} >{\raggedright\arraybackslash}p{0.2\columnwidth} >{\raggedright\arraybackslash}p{0.5\columnwidth}}
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.24\columnwidth} >{\raggedright\arraybackslash}p{0.17\columnwidth} X}
 \toprule
 \textbf{Field} & \textbf{Type} & \textbf{Purpose} \\
 \midrule
@@ -416,17 +414,17 @@ completion\_time & Integer & Total minutes spent \\
 review\_payload & JSON & Replayable data: question IDs, answers, metadata \\
 created\_at & Timestamp & Test completion time \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Test history table with optional review payload for explainability.}
 \end{table}
 
 \subsubsection{activity\_events}
 Event stream capturing all significant user actions for observability and analytics.
 
-\begin{table}[H]
+\begin{table}[t]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.25\columnwidth} >{\raggedright\arraybackslash}p{0.2\columnwidth} >{\raggedright\arraybackslash}p{0.5\columnwidth}}
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.24\columnwidth} >{\raggedright\arraybackslash}p{0.17\columnwidth} X}
 \toprule
 \textbf{Field} & \textbf{Type} & \textbf{Purpose} \\
 \midrule
@@ -436,7 +434,7 @@ event\_type & Text & Event category (e.g., question\_answered, test\_completed) 
 metadata & JSON & Event-specific context \\
 created\_at & Timestamp & Event occurrence time \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Activity events table for comprehensive telemetry and analytics.}
 \end{table}
 
@@ -448,10 +446,10 @@ Stores teacher account information and workspace metadata.
 \subsubsection{courses}
 Contains course information with unique join codes for student enrollment.
 
-\begin{table}[H]
+\begin{table}[t]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.25\columnwidth} >{\raggedright\arraybackslash}p{0.2\columnwidth} >{\raggedright\arraybackslash}p{0.5\columnwidth}}
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.24\columnwidth} >{\raggedright\arraybackslash}p{0.17\columnwidth} X}
 \toprule
 \textbf{Field} & \textbf{Type} & \textbf{Purpose} \\
 \midrule
@@ -462,7 +460,7 @@ join\_code & Text & Unique enrollment code \\
 description & Text & Course description \\
 created\_at & Timestamp & Course creation date \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Courses table for classroom creation and management.}
 \end{table}
 
@@ -660,29 +658,57 @@ where the mapping is typically:
 
 Given the learner state and target policy, the engine branches on whether an unresolved miss exists:
 
-\begin{figure}[H]
+\begin{figure*}[t]
 \centering
-\begin{tikzpicture}[node distance=0.9cm and 0.95cm]
-  \node[flow] (s) {Learner state\\$\mathbf{s}$};
-  \node[decision, right=of s] (miss) {Unresolved\\miss?};
-  
-  \node[flow, above right=0.6cm and 0.8cm of miss] (remed) {Remediation\\neighborhood\\(hop-limited BFS)};
-  \node[flow, below right=0.6cm and 0.8cm of miss] (current) {Current question\\neighborhood\\(k-hop)};
-  
-  \node[flow, below=1.2cm of miss] (candidate) {Merge and deduplicate\\(exclude answered, served)};
-  \node[flow, below=of candidate] (score) {Score candidates:\\heuristic + graph boost};
-  \node[flow, below=of score] (output) {Return top-$k$\\with reasoning};
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\begin{tikzpicture}[node distance=0.95cm and 1.0cm]
+  \node[flow] (state) {Session state};
+  \node[flow, right=of state] (momentum) {Compute momentum\\and reward signal};
+  \node[flow, right=of momentum] (target) {Target ELO and\\target difficulty};
 
-  \draw[line] (s) -- (miss);
+  \node[decision, below=1.1cm of momentum] (miss) {Unresolved\\miss?};
+  \node[flow, left=1.0cm of miss] (remed) {Graph neighbors around\\missed question};
+  \node[flow, right=1.0cm of miss] (curr) {Graph neighbors around\\current question};
+  \node[flow, below=1.1cm of miss] (pool) {Build candidate pool};
+  \node[insight, below=1.0cm of pool] (score) {Heuristic score\\plus graph boost};
+  \node[insight, below=1.0cm of score] (out) {Return next question\\with reasons and metadata};
+
+  \draw[line] (state) -- (momentum);
+  \draw[line] (momentum) -- (target);
+  \draw[line] (momentum) -- (miss);
   \draw[line] (miss) -- node[above, font=\scriptsize]{yes} (remed);
-  \draw[line] (miss) -- node[above, font=\scriptsize]{no} (current);
-  \draw[line] (remed) -- (candidate);
-  \draw[line] (current) -- (candidate);
-  \draw[line] (candidate) -- (score);
-  \draw[line] (score) -- (output);
+  \draw[line] (miss) -- node[above, font=\scriptsize]{no} (curr);
+  \draw[line] (remed) -- (pool);
+  \draw[line] (curr) -- (pool);
+  \draw[line] (target) |- (score);
+  \draw[line] (pool) -- (score);
+  \draw[line] (score) -- (out);
 \end{tikzpicture}
-\caption{Adaptive recommendation pipeline decision logic.}
-\end{figure}
+\caption{Adaptive recommendation flow.}
+\end{subfigure}\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\begin{tikzpicture}[node distance=0.95cm and 1.0cm]
+  \node[flow] (wrong) {Incorrect answer};
+  \node[flow, right=of wrong] (targetq) {Mark unresolved\\target question};
+  \node[flow, right=of targetq] (hops) {Serve remediation\\neighbors};
+  \node[flow, below=1.0cm of targetq] (track) {Track remediation\\accuracy and steps};
+  \node[decision, below=1.0cm of hops] (retry) {Enough steps and\\accuracy?};
+  \node[insight, left=1.1cm of retry] (more) {Continue\\remediation};
+  \node[insight, right=1.1cm of retry] (serve) {Retry original\\missed question};
+
+  \draw[line] (wrong) -- (targetq);
+  \draw[line] (targetq) -- (hops);
+  \draw[line] (hops) -- (track);
+  \draw[line] (track) -- (retry);
+  \draw[line] (retry) -- node[above, font=\scriptsize]{no} (more);
+  \draw[line] (retry) -- node[above, font=\scriptsize]{yes} (serve);
+\end{tikzpicture}
+\caption{Remediation and retry mechanism.}
+\end{subfigure}
+\caption{Side-by-side visualizations of the adaptive recommendation pipeline and its remediation logic.}
+\end{figure*}
 
 \subsubsection{Remediation Neighborhood}
 When a student answers a question incorrectly (unresolved miss), the engine defines a remediation neighborhood:
@@ -728,7 +754,13 @@ where:
    
    Typically:
    \begin{equation}
-   h(q') = 1.0 - \frac{w_1 \cdot d_{\text{diff}} + w_2 \cdot d_{\text{elo}}}{C_{\text{norm}}} + \beta_{\text{weak}} \cdot \mathbb{1}[q' \in \text{weak\_topics}] + \beta_{\text{type}} \cdot \mathbb{1}[\text{type}(q') \neq \text{type}(q)]
+   h(q') = 1.0 - \frac{w_1 \cdot d_{\text{diff}} + w_2 \cdot d_{\text{elo}}}{C_{\text{norm}}} + \beta_{\text{weak}} \cdot \mathbb{1}[q' \in \text{weak\_topics}] 
+   \ 
+
+
+
+   
+   + \beta_{\text{type}} \cdot \mathbb{1}[\text{type}(q') \neq \text{type}(q)]
    \end{equation}
 
 \item $g(q')$ is a \textbf{graph boost} rewarding structural properties:
@@ -877,13 +909,20 @@ where:
 The fallback coach implements heuristic rules:
 
 \subsubsection{Daily Study Suggestion}
-\begin{equation}
-\text{suggestion} = \begin{cases}
-\text{``Focus on } w_1 \text{ today---you have } (100 - \text{acc}_{w_1})\% \text{ room for improvement.''} & \text{if weak\_subjects not empty} \\
-\text{``Great momentum! Tackle harder problems in } s_1 \text{ today.''} & \text{if streak} > 5 \\
-\text{``Review fundamentals in } w_1 \text{ to build confidence.''} & \text{otherwise}
-\end{cases}
-\end{equation}
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.29\columnwidth} X}
+\toprule
+\textbf{Condition} & \textbf{Generated suggestion} \\
+\midrule
+Weak subjects available & Focus on $w_1$ today; you still have $(100 - \text{acc}_{w_1})\%$ room for improvement. \\
+Streak $> 5$ & Great momentum. Tackle harder problems in $s_1$ today. \\
+Otherwise & Review fundamentals in $w_1$ to build confidence. \\
+\bottomrule
+\end{tabularx}
+\caption{Daily study suggestion rules used by the deterministic coach.}
+\end{table}
 
 \subsubsection{7-Day Study Plan}
 The coach allocates effort across weak, strong, and new topics:
@@ -961,10 +1000,10 @@ This creates a unified view of classroom state available to the teacher dashboar
 
 For each enrolled student, compute:
 
-\begin{table}[H]
+\begin{table}[t]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.3\columnwidth} >{\raggedright\arraybackslash}p{0.65\columnwidth}}
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.31\columnwidth} X}
 \toprule
 \textbf{Metric} & \textbf{Definition} \\
 \midrule
@@ -976,7 +1015,7 @@ Risk Level & Composite score (see Section \ref{sec:risk-scoring}) \\
 Recent Activity & Last action timestamp (question answered, test completed, etc.) \\
 Performance Trend & 7-day accuracy comparison \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Student summary metrics computed for teacher viewing.}
 \end{table}
 
@@ -1026,13 +1065,15 @@ For each at-risk student, the teacher analytics module recommends actions:
 
 Example recommendation output:
 
-\begin{verbatim}
-Recommendation: Priya needs help with Probability & Statistics.
-- Current accuracy: 45%
-- Recent miss: Q2834 (binomial distribution)
-- Suggested action: Publish a 5-question probability assignment
-- Follow-up: Check progress in 2 days
-\end{verbatim}
+\begin{quote}
+\footnotesize\ttfamily
+Recommendation: Priya needs help with Probability \& Statistics.\\
+Current accuracy: 45\%\\
+Recent miss: Q2834 (binomial distribution)\\
+Suggested action: Publish a 5-question probability\\
+assignment.\\
+Follow-up: Check progress in 2 days
+\end{quote}
 
 \section{GATE Score Prediction Engine} \label{sec:score-prediction}
 
@@ -1186,7 +1227,7 @@ Students showing upward performance trends (improving over time) are likely to m
 \end{cases}
 \end{equation}
 
-This captures improvements/declines up to ±15 percentage points.
+This captures improvements and declines up to $\pm 15$ percentage points.
 
 \textbf{Normalization}:
 \begin{equation}
@@ -1270,18 +1311,20 @@ This maps to:
 
 The predictor generates contextual guidance:
 
-\begin{equation}
-\text{RecommendationText} = \begin{cases}
-\text{``Excellent! With your current preparation, expect GATE score 80--90.} \\ 
-\text{Focus on maintaining consistency across all topics.''} & \text{if } \text{Expected} \geq 75 \\
-\\
-\text{``Good progress. Expected score 60--70. Strengthen weak topics:} \\
-\text{[weak subjects list]. Increase mock attempt frequency.''} & \text{if } 60 \leq \text{Expected} < 75 \\
-\\
-\text{``Your preparation is on track for 40--60. Accelerate study} \\
-\text{intensity, especially in: [weak subjects]. Try 1 mock/week.''} & \text{if } \text{Expected} < 60
-\end{cases}
-\end{equation}
+\begin{table}[t]
+\centering
+\footnotesize
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.24\columnwidth} X}
+\toprule
+\textbf{Expected score band} & \textbf{Generated guidance} \\
+\midrule
+$\text{Expected} \geq 75$ & Excellent. Expect a GATE score around 80--90 and focus on maintaining consistency across all topics. \\
+$60 \leq \text{Expected} < 75$ & Good progress. Expect a score around 60--70, strengthen weak topics, and increase mock-test frequency. \\
+$\text{Expected} < 60$ & Preparation is on track for 40--60. Increase study intensity, prioritise weak areas, and attempt one mock test per week. \\
+\bottomrule
+\end{tabularx}
+\caption{Guidance text produced by the score predictor.}
+\end{table}
 
 \subsection{Worked Example}
 
@@ -1320,185 +1363,12 @@ Assume a student with:
 \end{itemize}
 
 \textbf{Recommendation:}
-"Good progress. Expected GATE score: 76--86 (best estimate: 78). Consistency is strong across topics. Recent acceleration (+7\%) is encouraging---maintain this pace by continuing daily practice on weak areas."
-
-\section{Deployment and Network Configuration}
-
-\subsection{Supabase Configuration and Setup}
-
-The \project{} platform relies on Supabase as its backend infrastructure. The configuration is managed through environment variables defined in the \tech{.env} file:
-
-\begin{table}[H]
-\centering
-\small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.35\columnwidth} >{\raggedright\arraybackslash}p{0.6\columnwidth}}
-\toprule
-\textbf{Environment Variable} & \textbf{Purpose} \\
-\midrule
-VITE\_STUDENT\_SUPABASE\_PROJECT\_ID & Project identifier for student-facing services \\
-VITE\_STUDENT\_SUPABASE\_URL & REST API endpoint for student data access \\
-VITE\_STUDENT\_SUPABASE\_PUBLISHABLE\_KEY & Public API key for unauthenticated operations \\
-VITE\_TEACHER\_SUPABASE\_PROJECT\_ID & Project identifier for teacher-facing services \\
-VITE\_TEACHER\_SUPABASE\_URL & REST API endpoint for teacher/classroom data \\
-VITE\_TEACHER\_SUPABASE\_PUBLISHABLE\_KEY & Public API key for teacher operations \\
-VITE\_TEACHER\_SUPABASE\_SCHEMA & Database schema targeting (default: public) \\
-\bottomrule
-\end{tabular}
-\caption{Environment variables for Supabase connectivity.}
-\end{table}
-
-\subsection{Network Connectivity Troubleshooting}
-
-\subsubsection{Common Connection Issues}
-
-The platform implements robust error handling for common network scenarios:
-
-\begin{enumerate}
-\item \textbf{Connection Reset Errors}: When Supabase server forcibly closes connections (error 10054 on Windows), typically due to:
-   \begin{itemize}
-   \item Network firewall or proxy blocking HTTPS traffic.
-   \item Supabase service experiencing temporary outages.
-   \item Invalid or expired project credentials.
-   \item Regional connectivity issues (attempting to reach a geographically distant server).
-   \end{itemize}
-
-\item \textbf{Timeout Errors}: Requests exceed response time limits (default 10-15 seconds), indicating:
-   \begin{itemize}
-   \item Slow network connection or high latency.
-   \item Supabase server overload or degradation.
-   \item Large query result sets causing serialization delays.
-   \end{itemize}
-
-\item \textbf{Unauthorized (401) Errors}: API key is invalid or RLS policies deny access:
-   \begin{itemize}
-   \item Public key has insufficient permissions for queried tables.
-   \item Row-Level Security (RLS) policies require JWT authentication.
-   \item User session token has expired.
-   \end{itemize}
-
-\item \textbf{Not Found (404) Errors}: Queried table or endpoint does not exist:
-   \begin{itemize}
-   \item Supabase schema migration incomplete.
-   \item Table name mismatch between code and database.
-   \item API endpoint version mismatch.
-   \end{itemize}
-\end{enumerate}
-
-\subsubsection{Diagnostic and Recovery Procedures}
-
-The \tech{STUDENT\_PROGRESS\_TRACKER.ipynb} notebook includes a comprehensive diagnostic cell that:
-
-\begin{enumerate}
-\item Verifies environment variables are correctly loaded from \tech{.env}.
-\item Tests connectivity with a simple query (limit=1) to detect basic connectivity issues.
-\item Logs detailed request/response information for debugging.
-\item Categorizes errors into actionable resolution steps.
-\end{enumerate}
-
-\textbf{Diagnostic Checklist}:
-
-\begin{verbatim}
-1. ✅ Environment Variables Loaded
-   - Check VITE_STUDENT_SUPABASE_URL is not empty
-   - Verify VITE_STUDENT_SUPABASE_PUBLISHABLE_KEY is valid (>20 chars)
-   
-2. 📡 Network Connectivity
-   - Verify internet connection is active
-   - Check firewall/proxy is not blocking *.supabase.co domains
-   - Try alternate DNS (e.g., 8.8.8.8)
-   
-3. 🔑 Authentication
-   - Confirm API key corresponds to correct Supabase project
-   - Verify project URL matches: https://[PROJECT_ID].supabase.co
-   - Check RLS policies allow public key access to tables
-   
-4. 📊 Database Readiness
-   - Verify all required tables exist in database
-   - Confirm schema migrations have completed
-   - Test with curl/Postman before running Python notebook
-\end{verbatim}
-
-\subsubsection{Connection Resilience Strategy}
-
-The fetch functions implement exponential backoff retry logic:
-
-\begin{equation}
-\text{wait\_time} = \text{base\_delay} \times (1 + \text{jitter})^{\text{attempt\_number}}
-\end{equation}
-
-where:
-\begin{itemize}
-\item $\text{base\_delay}$ = 1 second (initial retry delay).
-\item $\text{jitter} \in [0, 1)$ = random jitter to avoid thundering herd.
-\item $\text{attempt\_number} \in [0, 2]$ = retry count (3 total attempts).
-\end{itemize}
-
-Example progression:
-\begin{itemize}
-\item Attempt 1 fails: wait 1 second, retry.
-\item Attempt 2 fails: wait 1-2 seconds, retry.
-\item Attempt 3 fails: return empty dataset, fall back to mock data.
-\end{itemize}
-
-This ensures transient network hiccups don't cause immediate failures, while permanent outages are detected quickly.
-
-\subsection{Data Persistence Fallback Strategy}
-
-When Supabase connectivity is unavailable, the platform implements graceful degradation:
-
-\begin{enumerate}
-\item \textbf{Local State Preservation}: React Query caches are persisted to browser localStorage, enabling read-only access to recently-viewed data.
-
-\item \textbf{Mock Data Mode}: A fallback dataset (in \tech{src/data/mockData.ts}) provides realistic question bank and student profile samples for development and demonstration.
-
-\item \textbf{Offline Queuing}: User actions (answers submitted, tests completed) are queued in indexedDB. Once connectivity restores, changes are synced to Supabase with conflict resolution.
-
-\item \textbf{User Notification}: Clear messaging informs the user of limited connectivity:
-   \begin{verbatim}
-   ⚠️ Working Offline
-   Some features are limited. Changes will sync when connection restores.
-   \end{verbatim}
-\end{enumerate}
-
-\subsection{Supabase Architecture Best Practices}
-
-\subsubsection{Row-Level Security (RLS) Policies}
-
-All public schema tables enforce RLS:
-
-\begin{equation}
-\boxed{\begin{array}{l}
-\text{profiles: } \text{users can view/edit only their own profile} \\
-\text{user\_progress: } \text{users can view/edit only their own progress records} \\
-\text{answered\_questions: } \text{users can view/edit only their own answers} \\
-\text{test\_history: } \text{users can view their own tests; teachers can view enrolled students'} \\
-\text{teacher schema: } \text{teachers have full access to own courses/assignments; students have read-only on enrollments}
-\end{array}}
-\end{equation}
-
-RLS policies are enforced at the database layer, ensuring even compromised API keys cannot access unauthorized data.
-
-\subsubsection{Connection Pooling and Performance}
-
-Supabase REST API includes connection pooling and caching:
-
-\begin{itemize}
-\item HTTP/2 multiplexing reduces overhead for concurrent requests.
-\item Supabase edge functions support request batching to reduce round trips.
-\item Query responses are cached by Supabase CDN when appropriate (e.g., question bank read-only data).
-\end{itemize}
-
-For high-frequency operations (e.g., rapid question serving during adaptive sessions), batch requests are used to reduce latency:
-
-\begin{equation}
-\text{Time per request} = \text{network\_latency} + \text{database\_query\_time}
-\end{equation}
-
-Batching amortizes network latency:
-
-\begin{equation}
-\text{Cost (N requests batched)} < N \times \text{Cost (N individual requests)}
-\end{equation}
+\begin{quote}
+\footnotesize
+Good progress. Expected GATE score: 76--86 (best estimate: 78).
+Consistency is strong across topics. Recent acceleration (+7\%) is
+encouraging, so maintain this pace with daily practice on weak areas.
+\end{quote}
 
 \section{Telemetry, Persistence, and Event-Driven Observability}
 
@@ -1519,10 +1389,10 @@ This state is queried by the recommendation engines, analytics modules, and stud
 \subsubsection{Event Stream (activity\_events table)}
 In addition to state, every significant action is logged as an event:
 
-\begin{table}[H]
+\begin{table}[t]
 \centering
 \small
-\begin{tabular}{>{\raggedright\arraybackslash}p{0.25\columnwidth} >{\raggedright\arraybackslash}p{0.7\columnwidth}}
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}p{0.29\columnwidth} X}
 \toprule
 \textbf{Event Type} & \textbf{Metadata} \\
 \midrule
@@ -1538,7 +1408,7 @@ In addition to state, every significant action is logged as an event:
 \tech{assignment\_published} & teacher\_id, course\_id, assignment\_id \\
 \tech{submission\_received} & student\_id, assignment\_id, score \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \caption{Sample activity events and associated metadata.}
 \end{table}
 

@@ -7,17 +7,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { QuestionTraversalGraph } from "@/components/QuestionTraversalGraph";
 import { useStudentAuth } from "@/contexts/AuthContext";
 import { Question } from "@/data/questions";
 import { getTopicWiseTestQuestions } from "@/data/topicWiseTest";
 import { getAdaptiveQuestionBank } from "@/data/adaptiveTest";
 import { getAdaptiveMixQuestionBank } from "@/data/adaptiveMixTest";
+import { studentSupabase } from "@/integrations/supabase/student-client";
 import { Navbar } from "@/components/Navbar";
 import {
   buildRapidGuessWarning,
-  getRapidGuessAdjustedEloGain,
   getRapidGuessThresholdSeconds,
 } from "@/lib/practiceReview";
+import { applyDarsRatingUpdate, createInitialDarsRatingState } from "@/lib/darsRating";
 import {
   buildTestReviewPayload,
   calculateWarningBreakdown,
@@ -33,8 +35,10 @@ import {
   type ExamShellAction,
 } from "@/lib/examShellState";
 import {
+  getQuestionGraphEdge,
   recommendNextBestAdaptiveQuestion,
   type AdaptiveSessionAttempt,
+  type GraphRecommendationMetadata,
 } from "@/lib/nextBestQuestionEngine";
 import { logStudentActivityEvent } from "@/lib/activityEvents";
 import {
@@ -110,6 +114,177 @@ function selectFallbackAdaptiveQuestion(
     })[0] || null;
 }
 
+type AttemptHistoryEntry = {
+  questionId: string;
+  correct: boolean;
+  createdAt: string;
+};
+
+function createGraphSessionId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `graph-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getStudentActorName(
+  user: { user_metadata?: Record<string, unknown> | null; email?: string | null } | null
+) {
+  const fullName = user?.user_metadata?.full_name;
+  return typeof fullName === "string" && fullName.trim()
+    ? fullName.trim()
+    : user?.email?.split("@")[0] || "Learner";
+}
+
+function getOrderedPathIndices(state: ExamShellState, totalQuestions: number) {
+  const ordered = Array.from(state.visitedIndices).filter(
+    (index) => index >= 0 && index < totalQuestions
+  );
+
+  if (
+    state.currentQuestionIndex >= 0 &&
+    state.currentQuestionIndex < totalQuestions &&
+    !ordered.includes(state.currentQuestionIndex)
+  ) {
+    ordered.push(state.currentQuestionIndex);
+  }
+
+  return ordered;
+}
+
+function buildAttemptHistory(rows: Array<{ question_id: string | null; created_at: string; metadata: unknown }>) {
+  return rows
+    .map((row) => {
+      const metadata =
+        row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+          ? (row.metadata as Record<string, unknown>)
+          : null;
+      const wasCorrect = metadata?.was_correct;
+
+      if (!row.question_id || typeof wasCorrect !== "boolean") return null;
+
+      return {
+        questionId: row.question_id,
+        correct: wasCorrect,
+        createdAt: row.created_at,
+      } satisfies AttemptHistoryEntry;
+    })
+    .filter((entry): entry is AttemptHistoryEntry => Boolean(entry));
+}
+
+function buildGraphSessionMetadata({
+  sessionId,
+  testType,
+  subjectId,
+  topicId,
+  questionIndices,
+  questions,
+  examState,
+  graphMetadataByIndex,
+  currentQuestionTimeSpent,
+}: {
+  sessionId: string;
+  testType: "topic-wise" | "adaptive";
+  subjectId: string | null;
+  topicId: string | null;
+  questionIndices: number[];
+  questions: Question[];
+  examState: ExamShellState;
+  graphMetadataByIndex: Array<GraphRecommendationMetadata | null>;
+  currentQuestionTimeSpent: number;
+}) {
+  const questionPath = questionIndices
+    .map((questionIndex) => questions[questionIndex]?.id)
+    .filter((questionId): questionId is string => Boolean(questionId));
+
+  const steps = questionIndices
+    .map((questionIndex, orderIndex) => {
+      const question = questions[questionIndex];
+      if (!question) return null;
+
+      const answer = examState.answers.get(questionIndex) ?? null;
+      const answered = isAnsweredValue(answer);
+      const correct = answered ? isCorrectValue(question, answer) : null;
+      const graphMetadata = graphMetadataByIndex[questionIndex] || null;
+      const previousQuestionId =
+        orderIndex > 0 ? questions[questionIndices[orderIndex - 1]]?.id || null : null;
+      const fromQuestionId = graphMetadata?.fromQuestionId || previousQuestionId;
+      const derivedEdge =
+        fromQuestionId && fromQuestionId !== question.id
+          ? getQuestionGraphEdge(fromQuestionId, question.id)
+          : null;
+      const timeSpentSeconds =
+        questionIndex === examState.currentQuestionIndex && !examState.submitted
+          ? Math.max(examState.palette[questionIndex]?.timeSpentSeconds ?? 0, currentQuestionTimeSpent)
+          : examState.palette[questionIndex]?.timeSpentSeconds ?? 0;
+      const rapidGuessThresholdSeconds = answered ? getRapidGuessThresholdSeconds(question) : null;
+      const rapidGuessWarning =
+        answered &&
+        correct === true &&
+        typeof rapidGuessThresholdSeconds === "number" &&
+        timeSpentSeconds < rapidGuessThresholdSeconds;
+
+      return {
+        order: orderIndex + 1,
+        question_id: question.id,
+        from_question_id: fromQuestionId,
+        correct,
+        difficulty: question.difficulty,
+        edge_weight: graphMetadata?.edgeWeight ?? derivedEdge?.weight ?? null,
+        edge_kind: graphMetadata?.edgeKind ?? derivedEdge?.kind ?? null,
+        hop_distance: graphMetadata?.hopDistance ?? null,
+        remediation_for_question_id: graphMetadata?.remediationForQuestionId ?? null,
+        subject_id: question.subjectId,
+        topic_id: question.topicId,
+        time_spent_seconds: timeSpentSeconds,
+        rapid_guess_warning: rapidGuessWarning,
+        rapid_guess_threshold_seconds: rapidGuessThresholdSeconds,
+        warning_text: rapidGuessWarning ? buildRapidGuessWarning(question, timeSpentSeconds) : null,
+      };
+    })
+    .filter(
+      (
+        step
+      ): step is {
+        order: number;
+        question_id: string;
+        from_question_id: string | null;
+        correct: boolean | null;
+        difficulty: Question["difficulty"];
+        edge_weight: number | null;
+        edge_kind: string | null;
+        hop_distance: number | null;
+        remediation_for_question_id: string | null;
+        subject_id: string;
+        topic_id: string;
+        time_spent_seconds: number;
+        rapid_guess_warning: boolean;
+        rapid_guess_threshold_seconds: number | null;
+        warning_text: string | null;
+      } => Boolean(step)
+    );
+
+  const answeredSteps = steps.filter((step) => typeof step.correct === "boolean");
+  const correctCount = answeredSteps.filter((step) => step.correct).length;
+  const accuracy = answeredSteps.length > 0
+    ? Math.round((correctCount / answeredSteps.length) * 100)
+    : 0;
+
+  return {
+    session_id: sessionId,
+    test_type: testType,
+    subject_id: subjectId,
+    topic_id: topicId,
+    total_questions: questionPath.length,
+    answered_questions: answeredSteps.length,
+    accuracy,
+    current_question_id: questions[examState.currentQuestionIndex]?.id || null,
+    question_path: questionPath,
+    steps,
+  };
+}
+
 export function ExamShellComponent({
   testType,
   adaptiveType,
@@ -159,27 +334,32 @@ export function ExamShellComponent({
   // Load questions
   const [questions, setQuestions] = useState<Question[]>([]);
   const [adaptiveSessionAttempts, setAdaptiveSessionAttempts] = useState<AdaptiveSessionAttempt[]>([]);
-  const sessionIdRef = useRef(Math.random().toString(36).slice(2, 10));
+  const [graphMetadataByIndex, setGraphMetadataByIndex] = useState<Array<GraphRecommendationMetadata | null>>([]);
+  const [historicalAttempts, setHistoricalAttempts] = useState<AttemptHistoryEntry[]>([]);
+  const sessionIdRef = useRef(createGraphSessionId());
   const adaptiveExpandedIndicesRef = useRef<Set<number>>(new Set());
+  const graphProgressSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
-    sessionIdRef.current = Math.random().toString(36).slice(2, 10);
+    sessionIdRef.current = createGraphSessionId();
     adaptiveExpandedIndicesRef.current = new Set();
+    graphProgressSignatureRef.current = null;
     submittingRef.current = false;
     setExamState(null);
     setAdaptiveSessionAttempts([]);
+    setGraphMetadataByIndex([]);
     setShowReviewMode(false);
     setSubmitError(null);
 
     if (testType === "topic-wise") {
-      setQuestions(
-        getTopicWiseTestQuestions({
-          subjectId: subjectId || undefined,
-          topicId: topicId || undefined,
-          count: questionCount,
-          answeredIds: answeredQuestions,
-        })
-      );
+      const nextQuestions = getTopicWiseTestQuestions({
+        subjectId: subjectId || undefined,
+        topicId: topicId || undefined,
+        count: questionCount,
+        answeredIds: answeredQuestions,
+      });
+      setQuestions(nextQuestions);
+      setGraphMetadataByIndex(nextQuestions.map(() => null));
       return;
     }
 
@@ -206,6 +386,7 @@ export function ExamShellComponent({
       );
 
     setQuestions(seedQuestion ? [seedQuestion] : []);
+    setGraphMetadataByIndex(seedQuestion ? [seedRecommendation.graph || null] : []);
   }, [
     activeAdaptiveBank,
     adaptiveSubjectId,
@@ -224,6 +405,35 @@ export function ExamShellComponent({
   const submittingRef = useRef(false);
   const lastWarningTimeRef = useRef<number>(0);
   const [eloBreakdown, setEloBreakdown] = useState<Array<{ questionId: string; gain: number; penalty: number; total: number }>>();
+
+  useEffect(() => {
+    if (!user) {
+      setHistoricalAttempts([]);
+      return;
+    }
+
+    let active = true;
+
+    studentSupabase
+      .from("activity_events")
+      .select("question_id, created_at, metadata")
+      .eq("actor_id", user.id)
+      .eq("event_type", "question_answered")
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          console.warn("Could not load question attempt history", error);
+          return;
+        }
+
+        setHistoricalAttempts(buildAttemptHistory(data || []));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!questions.length || examState) return;
@@ -328,6 +538,173 @@ export function ExamShellComponent({
   const currentQuestion = examState ? questions[examState.currentQuestionIndex] : null;
   const currentAnswer = examState ? examState.answers.get(examState.currentQuestionIndex) : null;
   const isMarkedForReview = examState?.markedForReview.has(examState.currentQuestionIndex) ?? false;
+  const resolvedSubjectId = testType === "adaptive" && adaptiveType === "mix"
+    ? null
+    : subjectId || null;
+
+  const sessionPathIndices = useMemo(() => {
+    if (!examState) return [];
+    return getOrderedPathIndices(examState, questions.length);
+  }, [examState, questions.length]);
+
+  const sessionPathQuestionIds = useMemo(
+    () =>
+      sessionPathIndices
+        .map((questionIndex) => questions[questionIndex]?.id)
+        .filter((questionId): questionId is string => Boolean(questionId)),
+    [questions, sessionPathIndices]
+  );
+
+  const sessionNodeStates = useMemo(() => {
+    if (!examState) return {};
+
+    return sessionPathIndices.reduce<Record<string, "correct" | "wrong" | "current" | "pending">>(
+      (accumulator, questionIndex) => {
+        const question = questions[questionIndex];
+        if (!question) return accumulator;
+
+        const answer = examState.answers.get(questionIndex) ?? null;
+        if (isAnsweredValue(answer)) {
+          accumulator[question.id] = isCorrectValue(question, answer) ? "correct" : "wrong";
+        } else if (questionIndex === examState.currentQuestionIndex) {
+          accumulator[question.id] = "current";
+        } else {
+          accumulator[question.id] = "pending";
+        }
+
+        return accumulator;
+      },
+      {}
+    );
+  }, [examState, questions, sessionPathIndices]);
+
+  const currentSessionAnsweredAttempts = useMemo(
+    () =>
+      sessionPathIndices
+        .map((questionIndex) => {
+          const question = questions[questionIndex];
+          if (!question) return null;
+
+          const answer = examState?.answers.get(questionIndex) ?? null;
+          if (!isAnsweredValue(answer)) return null;
+
+          return {
+            questionId: question.id,
+            correct: isCorrectValue(question, answer),
+          };
+        })
+        .filter((entry): entry is { questionId: string; correct: boolean } => Boolean(entry)),
+    [examState?.answers, questions, sessionPathIndices]
+  );
+
+  const cumulativeAttemptQuestionIds = useMemo(() => {
+    const ordered: string[] = [];
+    const seen = new Set<string>();
+
+    historicalAttempts.forEach((entry) => {
+      if (seen.has(entry.questionId)) return;
+      seen.add(entry.questionId);
+      ordered.push(entry.questionId);
+    });
+
+    currentSessionAnsweredAttempts.forEach((entry) => {
+      if (seen.has(entry.questionId)) return;
+      seen.add(entry.questionId);
+      ordered.push(entry.questionId);
+    });
+
+    return ordered;
+  }, [currentSessionAnsweredAttempts, historicalAttempts]);
+
+  const cumulativeAttemptNodeStates = useMemo(() => {
+    const states: Record<string, "correct" | "wrong"> = {};
+
+    historicalAttempts.forEach((entry) => {
+      states[entry.questionId] = entry.correct ? "correct" : "wrong";
+    });
+
+    currentSessionAnsweredAttempts.forEach((entry) => {
+      states[entry.questionId] = entry.correct ? "correct" : "wrong";
+    });
+
+    return states;
+  }, [currentSessionAnsweredAttempts, historicalAttempts]);
+
+  const cumulativeCorrectCount = useMemo(
+    () =>
+      Object.values(cumulativeAttemptNodeStates).filter((state) => state === "correct").length,
+    [cumulativeAttemptNodeStates]
+  );
+
+  const cumulativeWrongCount = useMemo(
+    () =>
+      Object.values(cumulativeAttemptNodeStates).filter((state) => state === "wrong").length,
+    [cumulativeAttemptNodeStates]
+  );
+
+  const graphSessionMetadata = useMemo(() => {
+    if (!examState || sessionPathIndices.length === 0) return null;
+
+    return buildGraphSessionMetadata({
+      sessionId: sessionIdRef.current,
+      testType,
+      subjectId: resolvedSubjectId,
+      topicId: topicId || null,
+      questionIndices: sessionPathIndices,
+      questions,
+      examState,
+      graphMetadataByIndex,
+      currentQuestionTimeSpent: questionTimeSpent,
+    });
+  }, [
+    examState,
+    graphMetadataByIndex,
+    questionTimeSpent,
+    questions,
+    resolvedSubjectId,
+    sessionPathIndices,
+    testType,
+    topicId,
+  ]);
+
+  const graphProgressSignature = useMemo(() => {
+    if (!examState) return null;
+
+    return JSON.stringify({
+      path: sessionPathQuestionIds,
+      currentQuestionId: currentQuestion?.id || null,
+      states: sessionPathQuestionIds.map((questionId) => sessionNodeStates[questionId] || null),
+    });
+  }, [currentQuestion?.id, examState, sessionNodeStates, sessionPathQuestionIds]);
+
+  useEffect(() => {
+    if (!user || !graphSessionMetadata || !graphProgressSignature || examState?.submitted) return;
+    if (graphProgressSignatureRef.current === graphProgressSignature) return;
+
+    graphProgressSignatureRef.current = graphProgressSignature;
+
+    void logStudentActivityEvent({
+      actorId: user.id,
+      actorRole: "student",
+      actorName: getStudentActorName(user),
+      eventType: "graph_path_progress",
+      subjectId: resolvedSubjectId,
+      topicId: topicId || null,
+      questionId: currentQuestion?.id || null,
+      metadata: {
+        ...graphSessionMetadata,
+        status: "in-progress",
+      },
+    });
+  }, [
+    currentQuestion?.id,
+    examState?.submitted,
+    graphProgressSignature,
+    graphSessionMetadata,
+    resolvedSubjectId,
+    topicId,
+    user,
+  ]);
 
   const buildNextAdaptiveAttempt = useCallback(() => {
     if (!examState || testType !== "adaptive") return adaptiveSessionAttempts;
@@ -406,11 +783,17 @@ export function ExamShellComponent({
 
     if (!nextQuestion) return false;
 
-    setQuestions((previous) =>
-      previous.some((question) => question.id === nextQuestion.id)
-        ? previous
-        : [...previous, nextQuestion]
-    );
+    const nextGraphMetadata =
+      recommendation.question?.id === nextQuestion.id ? recommendation.graph || null : null;
+
+    setQuestions((previous) => {
+      if (previous.some((question) => question.id === nextQuestion.id)) return previous;
+      return [...previous, nextQuestion];
+    });
+    setGraphMetadataByIndex((previous) => {
+      if (previous.length > nextIndex) return previous;
+      return [...previous, nextGraphMetadata];
+    });
 
     return true;
   }, [
@@ -420,6 +803,7 @@ export function ExamShellComponent({
     answeredQuestions,
     buildNextAdaptiveAttempt,
     examState,
+    graphMetadataByIndex.length,
     questionCount,
     questions,
     studentElo,
@@ -527,7 +911,7 @@ export function ExamShellComponent({
       let totalMarks = 0;
       let maxMarks = 0;
       let attemptedCount = 0;
-      let nextElo = studentElo;
+      let darsState = createInitialDarsRatingState(studentElo, answeredQuestions.size);
       const questionReviews: QuestionSessionReviewPayload[] = [];
 
       questions.forEach((q, i) => {
@@ -538,19 +922,28 @@ export function ExamShellComponent({
         const rapidGuessThresholdSeconds = getRapidGuessThresholdSeconds(q);
         const rapidGuessWarning = isCorrect && timeSpentSeconds < rapidGuessThresholdSeconds;
         let eloAdjustment = 0;
+        let remediationForQuestionId: string | null = null;
 
         maxMarks += q.marks;
         if (isCorrect) {
           totalMarks += q.marks;
           correctCount++;
-          const eloOutcome = getRapidGuessAdjustedEloGain(nextElo, q, timeSpentSeconds, true);
-          nextElo += eloOutcome.adjustedGain;
-          eloAdjustment = eloOutcome.appliedPenalty;
         } else if (isAnswered && q.type === "mcq") {
           totalMarks -= q.negativeMarks;
         }
 
         if (isAnswered) {
+          remediationForQuestionId = graphMetadataByIndex[i]?.remediationForQuestionId || null;
+          const darsUpdate = applyDarsRatingUpdate(darsState, {
+            question: q,
+            correct: isCorrect,
+            timeSpentSeconds,
+            hintsUsed: 0,
+            maxHints: 0,
+            remediationForQuestionId,
+          });
+          darsState = darsUpdate.state;
+          eloAdjustment = darsUpdate.outcome.rapidGuessAdjustment;
           attemptedCount++;
           addAnsweredQuestion(q.id, isCorrect);
           updateSubjectScore(q.subjectId, isCorrect, q.topicId);
@@ -564,17 +957,29 @@ export function ExamShellComponent({
           rapidGuessThresholdSeconds,
           eloAdjustment,
           warningText: rapidGuessWarning ? buildRapidGuessWarning(q, timeSpentSeconds) : null,
-          remediationForQuestionId: null,
+          remediationForQuestionId,
         });
       });
 
-      setStudentElo(nextElo);
+      setStudentElo(darsState.rating);
 
       // Build warning breakdown
       const warningBreakdown = calculateWarningBreakdown(0, testType);
 
       // Get answers in the correct format
       const answersArray = getAnswersArray(finalizedState, questions.length);
+      const finalQuestionIndices = getOrderedPathIndices(finalizedState, questions.length);
+      const finalGraphSessionMetadata = buildGraphSessionMetadata({
+        sessionId: sessionIdRef.current,
+        testType,
+        subjectId: testType === "adaptive" && adaptiveType === "mix" ? null : subjectId || null,
+        topicId: topicId || null,
+        questionIndices: finalQuestionIndices,
+        questions,
+        examState: finalizedState,
+        graphMetadataByIndex,
+        currentQuestionTimeSpent: 0,
+      });
 
       // Build review payload with question IDs and answers
       const reviewPayload = buildTestReviewPayload({
@@ -590,12 +995,14 @@ export function ExamShellComponent({
           startTime: new Date(finalizedState.timerStartedAt).toISOString(),
           endTime: new Date(submissionTime).toISOString(),
           testType,
+          graphSessionId: finalGraphSessionMetadata.session_id,
         },
+        graphPath: finalGraphSessionMetadata,
       });
 
       // Save to history if user exists
       if (user) {
-        await recordTestHistory({
+        const savedHistoryId = await recordTestHistory({
           test_type: testType,
           subject_id: testType === "adaptive" && adaptiveType === "mix" ? null : subjectId,
           topic_id: topicId || null,
@@ -626,6 +1033,23 @@ export function ExamShellComponent({
             duration_seconds: attemptDurationSeconds,
           },
         });
+
+        await logStudentActivityEvent({
+          actorId: user.id,
+          actorRole: "student",
+          actorName: getStudentActorName(user),
+          eventType: "graph_path_completed",
+          subjectId: testType === "adaptive" && adaptiveType === "mix" ? null : subjectId || null,
+          topicId: topicId || null,
+          questionId: questions[finalizedState.currentQuestionIndex]?.id || null,
+          metadata: {
+            ...finalGraphSessionMetadata,
+            status: "completed",
+            test_history_id: savedHistoryId,
+            website_test_id: savedHistoryId,
+            duration_seconds: attemptDurationSeconds,
+          },
+        });
       }
 
       // Mark exam as submitted
@@ -635,9 +1059,15 @@ export function ExamShellComponent({
       if (onComplete) {
         onComplete(reviewPayload);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error submitting test:", error);
-      setSubmitError(error instanceof Error ? error.message : "Failed to submit test. Please try again.");
+      let errorMessage = error?.message || error?.details || "Failed to submit test. Please try again.";
+      
+      if (errorMessage.toLowerCase().includes("jwt expired")) {
+        errorMessage = "Your session has expired. Please copy your answers, sign out, and sign in again to submit.";
+      }
+      
+      setSubmitError(errorMessage);
       submittingRef.current = false;
     }
   }, [
@@ -645,6 +1075,8 @@ export function ExamShellComponent({
     addAnsweredQuestion,
     calculatedDurationMinutes,
     examState,
+    graphMetadataByIndex,
+    answeredQuestions,
     onComplete,
     processAction,
     questions,
@@ -658,8 +1090,11 @@ export function ExamShellComponent({
     user,
   ]);
 
+  const hasAttemptedSubmitRef = useRef(false);
+
   useEffect(() => {
-    if (!examState?.submitted || submittingRef.current || !questions.length) return;
+    if (!examState?.submitted || submittingRef.current || hasAttemptedSubmitRef.current || !questions.length) return;
+    hasAttemptedSubmitRef.current = true;
     void handleSubmit();
   }, [examState?.submitted, handleSubmit, questions.length]);
 
@@ -714,7 +1149,7 @@ export function ExamShellComponent({
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
-        <div className="container py-12 max-w-3xl">
+        <div className="container py-12 max-w-5xl">
           <div className="bg-card border rounded-xl p-8 space-y-6">
             <div className="h-16 w-16 rounded-full bg-success/10 flex items-center justify-center mx-auto">
               <CheckCircle2 className="h-8 w-8 text-success" />
@@ -743,6 +1178,9 @@ export function ExamShellComponent({
             <div className="flex flex-wrap justify-center gap-3">
               <Button variant="outline" onClick={() => setShowReviewMode(true)}>Review Answers</Button>
               <Button variant="outline" onClick={() => navigate("/practice")}>Back to Practice</Button>
+              {testType === "adaptive" && (
+                <Button variant="outline" onClick={() => navigate("/insights")}>View Adaptive Tests</Button>
+              )}
               <Button variant="hero" onClick={() => navigate("/dashboard")}>View Dashboard</Button>
             </div>
           </div>
@@ -892,7 +1330,15 @@ export function ExamShellComponent({
                 {String(timerMinutes).padStart(2, "0")}:{String(timerSeconds).padStart(2, "0")}
               </span>
             </div>
-            <Button size="sm" onClick={handleSubmit} disabled={examState.submitted}>
+            <Button 
+              size="sm" 
+              onClick={() => {
+                if (window.confirm("Are you sure you want to submit your practice session?")) {
+                  handleSubmit();
+                }
+              }} 
+              disabled={examState.submitted}
+            >
               Submit
             </Button>
           </div>
@@ -1006,6 +1452,8 @@ export function ExamShellComponent({
                   </Button>
                 </div>
               </div>
+
+
             </div>
           )}
         </div>

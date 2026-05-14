@@ -1,0 +1,16 @@
+subject,topic,topic_accuracy_pct,question_id,difficulty,eloRating,adaptiveEligible,question_preview
+Linear Algebra,Matrices & Determinants,25.0,mock4-q11,medium,1350.0,True,"For vectors u and v, the Cauchy-Schwarz inequality states:"
+Linear Algebra,Matrices & Determinants,25.0,mock4-q32,medium,1350.0,True,The null space (kernel) of a matrix A consists of all vectors x such that:
+Linear Algebra,Matrices & Determinants,25.0,mock3-q29,easy,1300.0,True,Which statement about SVD is TRUE?
+Calculus & Optimization,Differentiation,91.7,co-14,medium,1350.0,True,Chain rule states?
+Calculus & Optimization,Differentiation,91.7,mock2-q60,easy,1300.0,True,"If f′(x0) = 0 and f′′(x0) = 0, which conclusion is valid?"
+Calculus & Optimization,Differentiation,91.7,mock3-q61,easy,1300.0,True,The function f(x) = x³ − 3x has
+Artificial Intelligence,Propositional & Predicate Logic,100.0,ai-36,medium,1400.0,True,Modus Ponens states?
+Artificial Intelligence,Propositional & Predicate Logic,100.0,ai-37,medium,1400.0,True,Modus Tollens states?
+Artificial Intelligence,Propositional & Predicate Logic,100.0,ai-39,medium,1400.0,True,Predicate logic deals with?
+Database Management Systems,SQL & Relational Algebra,100.0,dbms-11,medium,1350.0,True,LEFT JOIN returns?
+Database Management Systems,SQL & Relational Algebra,100.0,dbms-12,medium,1350.0,True,RIGHT JOIN returns?
+Database Management Systems,SQL & Relational Algebra,100.0,dbms-19,medium,1350.0,True,Foreign key ensures?
+General Aptitude,Logical Reasoning,100.0,da2024-q10,easy,1400.0,False,Visualize two identical right circular cones such that one is inverted over the other and they share a common...
+General Aptitude,Logical Reasoning,100.0,da2024-q5,easy,1400.0,False,"In an election, the share of valid votes received by the four candidates A, B, C, and D is represented by the pie..."
+General Aptitude,Logical Reasoning,100.0,da2024-q6,medium,1400.0,False,"Thousands of years ago, some people began dairy farming. This coincided with a number of mutations in a particular..."

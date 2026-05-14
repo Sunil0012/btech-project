@@ -637,9 +637,9 @@ export default function DashboardPage() {
         <div className="mb-8" />
 
         {/* Stats Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
           <ScrollReveal delay={0}>
-            <div className="bg-card border rounded-xl p-5 shadow-sm">
+            <div className="bg-card border rounded-xl p-5 shadow-sm h-full">
               <div className="flex items-center gap-3 mb-2">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                   <Trophy className="h-5 w-5 text-primary" />
@@ -658,12 +658,13 @@ export default function DashboardPage() {
 
           {[
             { label: "Questions Solved", value: answeredQuestions.size, icon: Target, color: "text-accent", sub: `of ${totalQuestions}` },
+            { label: "Correct Answers", value: totalCorrect, icon: Award, color: "text-success", sub: "Well done!" },
             { label: "Accuracy", value: `${overallAccuracy}%`, icon: BarChart3, color: overallAccuracy >= 60 ? "text-success" : "text-destructive", sub: `${totalCorrect}/${totalAnswered}` },
             { label: "Streak", value: `${displayStreak} days`, icon: Flame, color: "text-warning", sub: "Keep it up!" },
             { label: "Tests Taken", value: testHistory.length, icon: Clock, color: "text-primary", sub: "Total sessions" },
           ].map((stat, i) => (
             <ScrollReveal key={stat.label} delay={(i + 1) * 60}>
-              <div className="bg-card border rounded-xl p-5 shadow-sm">
+              <div className="bg-card border rounded-xl p-5 shadow-sm h-full">
                 <div className="flex items-center gap-2 mb-2">
                   <stat.icon className={`h-4 w-4 ${stat.color}`} />
                   <span className="text-xs text-muted-foreground">{stat.label}</span>

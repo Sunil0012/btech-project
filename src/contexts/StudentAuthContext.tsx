@@ -141,7 +141,9 @@ function getFallbackDisplayName(user: User) {
 
 async function parseAuthError(response: Response) {
   try {
-    const body = await response.json();
+    const text = await response.text();
+    if (!text) return `Auth request failed with status ${response.status}.`;
+    const body = JSON.parse(text);
     return body?.msg || body?.message || `Auth request failed with status ${response.status}.`;
   } catch {
     return `Auth request failed with status ${response.status}.`;
@@ -166,7 +168,12 @@ async function requestAuthEndpoint<T>(path: string, body: Record<string, unknown
     throw new Error(await parseAuthError(response));
   }
 
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  if (!text) {
+    throw new Error(`Auth request returned an empty response with status ${response.status}.`);
+  }
+
+  return JSON.parse(text) as T;
 }
 
 async function applySessionFromAuthPayload(payload: AuthResponseSessionPayload) {
@@ -203,6 +210,7 @@ async function ensureStudentProfile(sessionUser: User) {
       full_name: fallbackName,
       email: fallbackEmail,
       role: "student",
+      elo_rating: 1500,
     };
 
     const { data, error } = await studentSupabase
@@ -269,7 +277,7 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
   const resetAppState = useCallback(() => {
     setProfile(null);
     setEnrolledCourses([]);
-    setStudentEloState(readStoredElo());
+    // Preserve the current ELO score instead of resetting to default
     setAnsweredQuestions(readStoredAnsweredQuestions());
     setSubjectScores(readStoredSubjectScores());
   }, []);
@@ -328,16 +336,33 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
             .map((item) => item.question_id)
         )
       : readStoredAnsweredQuestions();
+    
     const scoreMap = progressData?.length
       ? buildSubjectScoresFromRows(progressData)
       : readStoredSubjectScores();
-    const elo = nextProfile.elo_rating ?? readStoredElo();
+
+    const eloFromDb = nextProfile.elo_rating;
+    const eloFromLocal = readStoredElo();
+    
+    // If DB has default 1500 but local storage has a different value, 
+    // it's likely a sync issue from a previous session where DB update failed.
+    let elo = (eloFromDb !== null && eloFromDb !== undefined && eloFromDb !== 1500) 
+      ? eloFromDb 
+      : eloFromLocal;
 
     setProfile(nextProfile);
     setStudentEloState(elo);
     setAnsweredQuestions(answeredSet);
     setSubjectScores(scoreMap);
     persistLocalState(elo, answeredSet, scoreMap);
+
+    // If we resolved to a local value because DB was 1500, push it back to DB
+    if (elo !== eloFromDb && elo !== 1500) {
+      void studentSupabase
+        .from("profiles")
+        .update({ elo_rating: elo })
+        .eq("user_id", sessionUser.id);
+    }
 
     setEnrolledCourses(await listStudentClassrooms(sessionUser.id));
     return "student" as const;
@@ -516,19 +541,42 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
   }, [resetAppState, user]);
 
   const setStudentElo = useCallback((elo: number) => {
+    // 1. Update local state and storage immediately
     setStudentEloState(elo);
     localStorage.setItem(ELO_STORAGE_KEY, elo.toString());
 
     if (!user) return;
 
-    void studentSupabase
-      .from("profiles")
-      .update({
-        elo_rating: elo,
-        last_active: new Date().toISOString(),
-      })
-      .eq("user_id", user.id);
+    // 2. Sync to database with error handling
+    void (async () => {
+      try {
+        const { error } = await studentSupabase
+          .from("profiles")
+          .update({
+            elo_rating: elo,
+            last_active: new Date().toISOString(),
+          })
+          .eq("user_id", user.id);
 
+        if (error) {
+          console.error("Failed to sync ELO to database:", error);
+          // Fallback to upsert if update fails (e.g. if record exists but RLS/matching issues)
+          await studentSupabase
+            .from("profiles")
+            .upsert({
+              user_id: user.id,
+              elo_rating: elo,
+              last_active: new Date().toISOString(),
+            }, { onConflict: 'user_id' });
+        } else {
+          console.log("Successfully synced ELO to database:", elo);
+        }
+      } catch (err) {
+        console.error("Critical error syncing ELO:", err);
+      }
+    })();
+
+    // 3. Sync to teacher portal
     void syncTeacherMirror(user, profile, subjectScores, elo);
   }, [profile, subjectScores, syncTeacherMirror, user]);
 
@@ -629,7 +677,7 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
                 }
               );
             })
-            .catch((error) => {
+            .catch((error: any) => {
               console.error("Could not sync topic progress", error);
             });
         }
@@ -714,6 +762,9 @@ export function StudentAuthProvider({ children }: { children: ReactNode }) {
       completed_at: completedAt,
       user_id: user.id,
     };
+    
+    // Ensure session is fresh before inserting to prevent "JWT expired" errors
+    await studentSupabase.auth.getSession();
     
     console.log("recordTestHistory: Saving test with payload:", {
       testType: entry.test_type,

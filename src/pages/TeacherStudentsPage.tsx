@@ -1,19 +1,20 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, Search, ShieldCheck, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { TeacherMetricCard } from "@/components/teacher/TeacherMetricCard";
 import { TeacherRosterTable } from "@/components/teacher/TeacherRosterTable";
-import { TeacherStudentProfileDialog } from "@/components/teacher/TeacherStudentProfileDialog";
 import { TeacherWorkspaceHeader } from "@/components/teacher/TeacherWorkspaceHeader";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useTeacherWorkspace } from "@/hooks/useTeacherWorkspace";
 import { buildTeacherStudentSummaries, type TeacherStudentSummary } from "@/lib/teacherAnalytics";
 import { removeStudentFromCourseForSignedInTeacher } from "@/lib/classroomData";
 import { toast } from "@/hooks/use-toast";
 
 function TeacherStudentsPage() {
+  const navigate = useNavigate();
   const { workspace, loading, refresh } = useTeacherWorkspace();
-  const [selectedStudent, setSelectedStudent] = useState<TeacherStudentSummary | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState<"all" | "high" | "medium" | "low">("all");
   const [removingStudentId, setRemovingStudentId] = useState<string | null>(null);
@@ -83,10 +84,6 @@ function TeacherStudentsPage() {
           courseId,
           studentId: student.userId,
         });
-      }
-
-      if (selectedStudent?.userId === student.userId) {
-        setSelectedStudent(null);
       }
 
       // Wait for database persistence
@@ -213,7 +210,7 @@ function TeacherStudentsPage() {
                     key={student.userId}
                     type="button"
                     className="w-full rounded-xl border border-rose-100 bg-rose-50 p-4 text-left transition-colors hover:bg-rose-100/70"
-                    onClick={() => setSelectedStudent(student)}
+                    onClick={() => navigate(`/teacher/students/${student.userId}`)}
                   >
                     <p className="font-semibold text-foreground">{student.name}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -243,7 +240,7 @@ function TeacherStudentsPage() {
                     key={student.userId}
                     type="button"
                     className="w-full rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-left transition-colors hover:bg-emerald-100/70"
-                    onClick={() => setSelectedStudent(student)}
+                    onClick={() => navigate(`/teacher/students/${student.userId}`)}
                   >
                     <p className="font-semibold text-foreground">{student.name}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -265,24 +262,9 @@ function TeacherStudentsPage() {
 
           <TeacherRosterTable 
             students={filteredStudents} 
-            onSelectStudent={setSelectedStudent}
+            onSelectStudent={(student) => navigate(`/teacher/students/${student.userId}`)}
             onRemoveStudent={handleRemoveStudent}
             removingStudentId={removingStudentId}
-          />
-
-          <TeacherStudentProfileDialog
-            student={selectedStudent}
-            enrollments={workspace.enrollments}
-            activityEvents={workspace.activityEvents}
-            progressRows={workspace.progressRows}
-            testHistoryRows={workspace.testHistoryRows}
-            assignments={workspace.assignments}
-            submissions={workspace.submissions}
-            open={Boolean(selectedStudent)}
-            onOpenChange={(open) => !open && setSelectedStudent(null)}
-            onDelete={async () => {
-              await refresh?.();
-            }}
           />
         </div>
       )}

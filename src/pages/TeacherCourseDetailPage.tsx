@@ -4,7 +4,6 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AssignmentBuilderModal } from "@/components/AssignmentBuilderModal";
 import { TeacherLayout } from "@/components/TeacherLayout";
 import { TeacherRosterTable } from "@/components/teacher/TeacherRosterTable";
-import { TeacherStudentProfileDialog } from "@/components/teacher/TeacherStudentProfileDialog";
 import { TeacherWorkspaceHeader } from "@/components/teacher/TeacherWorkspaceHeader";
 import { Button } from "@/components/ui/button";
 import { useTeacherWorkspace } from "@/hooks/useTeacherWorkspace";
@@ -35,7 +34,6 @@ function TeacherCourseDetailPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { workspace, loading, refresh, syncing, lastUpdatedAt, liveUpdatesEnabled, error, workspaceReady } = useTeacherWorkspace();
-  const [selectedStudent, setSelectedStudent] = useState<TeacherStudentSummary | null>(null);
   const [removingStudentId, setRemovingStudentId] = useState<string | null>(null);
   const [deletingCourse, setDeletingCourse] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>((searchParams.get("tab") as TabType) || "home");
@@ -245,10 +243,6 @@ function TeacherCourseDetailPage() {
         courseId: course.id,
         studentId: student.userId,
       });
-
-      if (selectedStudent?.userId === student.userId) {
-        setSelectedStudent(null);
-      }
 
       // Wait for database persistence
       await new Promise((resolve) => setTimeout(resolve, 800));
@@ -483,13 +477,12 @@ function TeacherCourseDetailPage() {
                                   </div>
                                 </div>
                               </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSelectedStudent(student)}
+                              <button
+                                onClick={() => navigate(`/teacher/students/${student.userId}`)}
+                                className="px-4 py-2 rounded-lg border border-primary/20 bg-primary/5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors"
                               >
-                                View
-                              </Button>
+                                View Profile
+                              </button>
                             </div>
                           </div>
                         ))
@@ -512,7 +505,7 @@ function TeacherCourseDetailPage() {
                 <div className="rounded-xl border bg-card shadow-sm">
                   <TeacherRosterTable
                     students={courseStudents}
-                    onSelectStudent={setSelectedStudent}
+                    onSelectStudent={(student) => navigate(`/teacher/students/${student.userId}`)}
                     onRemoveStudent={(student) => void handleRemoveStudent(student)}
                     removingStudentId={removingStudentId}
                   />
@@ -566,21 +559,6 @@ function TeacherCourseDetailPage() {
               )}
             </div>
           </div>
-
-          <TeacherStudentProfileDialog
-            student={selectedStudent}
-            enrollments={workspace.enrollments.filter((enrollment) => enrollment.course_id === courseId)}
-            activityEvents={workspace.activityEvents}
-            progressRows={workspace.progressRows}
-            testHistoryRows={workspace.testHistoryRows}
-            assignments={workspace.assignments}
-            submissions={workspace.submissions}
-            open={Boolean(selectedStudent)}
-            onOpenChange={(open) => !open && setSelectedStudent(null)}
-            onDelete={async () => {
-              await refresh();
-            }}
-          />
         </div>
       )}
     </TeacherLayout>

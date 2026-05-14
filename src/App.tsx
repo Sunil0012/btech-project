@@ -31,6 +31,7 @@ import TeacherCoursesPage from "./pages/TeacherCoursesPage";
 import TeacherCourseDetailPage from "./pages/TeacherCourseDetailPage";
 import TeacherAssignmentsPage from "./pages/TeacherAssignmentsPage";
 import TeacherStudentsPage from "./pages/TeacherStudentsPage";
+import { TeacherStudentProfilePage } from "./pages/TeacherStudentProfilePage";
 import TeacherAnalyticsPage from "./pages/TeacherAnalyticsPage";
 import TeacherSettingsPage from "./pages/TeacherSettingsPage";
 import NotFound from "./pages/NotFound";
@@ -72,6 +73,7 @@ const App = () => (
               <Route path="/teacher/courses/:courseId" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherCourseDetailPage /></ProtectedRoute>} />
               <Route path="/teacher/assignments" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherAssignmentsPage /></ProtectedRoute>} />
               <Route path="/teacher/students" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherStudentsPage /></ProtectedRoute>} />
+              <Route path="/teacher/students/:studentId" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherStudentProfilePage /></ProtectedRoute>} />
               <Route path="/teacher/analytics" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherAnalyticsPage /></ProtectedRoute>} />
               <Route path="/teacher/settings" element={<ProtectedRoute allowedRoles={["teacher"]}><TeacherSettingsPage /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
