@@ -10,6 +10,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "ai:deploy": "npx supabase functions deploy ollama-proxy --project-ref ukiuxecvybwvngwirjqt",
+    "export:questions": "node tools/export_question_bank.mjs",
+    "generate:dars-datasets": "node scripts/generate-dars-datasets.mjs",
+    "simulate:students": "node scripts/simulate-adaptive-students.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

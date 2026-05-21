@@ -1,0 +1,8 @@
+Metric,Value
+Accuracy,0.7671
+Brier Score,0.1611
+Log Loss,0.4967
+ROC AUC,0.7485
+ECE (10 bins),0.0375
+Sensitivity,0.9407
+Specificity,0.2737

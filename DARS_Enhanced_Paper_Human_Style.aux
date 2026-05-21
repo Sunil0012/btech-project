@@ -1,0 +1,61 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-A}}The Real Problem}{1}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-B}}What We Did}{1}{subsection.1.2}\protected@file@percent }
+\citation{corbett1994bkt,waters2015bkt_limitations}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {I-C}}Main Findings}{2}{subsection.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {II}What Others Have Done}{2}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}The Rating Game}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Knowledge Tracing Models}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Graph-Based Routing}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-D}}Fairness in EdTech}{2}{subsection.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Experiment Design}{2}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}The Data}{2}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Feature Engineering: The Heart of the System}{3}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Train-Test Split}{3}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Methods}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {V}Graph Construction Strategies}{3}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Results}{3}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}Main Accuracy Comparison}{3}{subsection.6.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Head-to-head comparison. DARS wins on all metrics. Classical rating systems (Elo, Glicko-2) need richer features. Neural baselines struggle with class imbalance and limited training data.}}{3}{table.1}\protected@file@percent }
+\newlabel{tab:results}{{I}{3}{Head-to-head comparison. DARS wins on all metrics. Classical rating systems (Elo, Glicko-2) need richer features. Neural baselines struggle with class imbalance and limited training data}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Graph Construction Comparison}{3}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}Feature Importance}{3}{subsection.6.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Expert-curated graphs outperform learned ones. Human domain knowledge, when systematized, still wins against automatic methods.}}{4}{table.2}\protected@file@percent }
+\newlabel{tab:graphs}{{II}{4}{Expert-curated graphs outperform learned ones. Human domain knowledge, when systematized, still wins against automatic methods}{table.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces What Matters. Frequency (popularity) is the single strongest signal. Engagement's negative coefficient reflects that basic problems get more discussion.}}{4}{table.3}\protected@file@percent }
+\newlabel{tab:coef}{{III}{4}{What Matters. Frequency (popularity) is the single strongest signal. Engagement's negative coefficient reflects that basic problems get more discussion}{table.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-D}}Feature Ablation}{4}{subsection.6.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Ablation: what happens if you drop each feature? Frequency is non-negotiable. Reputation barely helps. The model relies on a small number of strong signals.}}{4}{table.4}\protected@file@percent }
+\newlabel{tab:ablation}{{IV}{4}{Ablation: what happens if you drop each feature? Frequency is non-negotiable. Reputation barely helps. The model relies on a small number of strong signals}{table.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-E}}Cold-Start Trap}{4}{subsection.6.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-F}}Fairness: The Uncomfortable Truth}{4}{subsection.6.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces The Cold-Start Wall. New or unpopular problems (Q4) are 22 percentage points harder to predict. This is not a model failure; it is an information shortage.}}{4}{table.5}\protected@file@percent }
+\newlabel{tab:coldstart}{{V}{4}{The Cold-Start Wall. New or unpopular problems (Q4) are 22 percentage points harder to predict. This is not a model failure; it is an information shortage}{table.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {VI}{\ignorespaces Fairness Problem. The model predicts "Hard" far more often than "Easy." True Easy problems are recalled at 27\%, but Medium/Hard at 94\%. This bias reflects class imbalance and is a decision you must make explicitly.}}{4}{table.6}\protected@file@percent }
+\newlabel{tab:fairness}{{VI}{4}{Fairness Problem. The model predicts "Hard" far more often than "Easy." True Easy problems are recalled at 27\%, but Medium/Hard at 94\%. This bias reflects class imbalance and is a decision you must make explicitly}{table.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-G}}Robustness to Input Noise}{4}{subsection.6.7}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {VII}{\ignorespaces Noise Robustness. DARS tolerates small measurement errors. If your acceptance rate is accurate to within 10\%, you are safe. Beyond 15\% noise, performance suffers.}}{4}{table.7}\protected@file@percent }
+\newlabel{tab:noise}{{VII}{4}{Noise Robustness. DARS tolerates small measurement errors. If your acceptance rate is accurate to within 10\%, you are safe. Beyond 15\% noise, performance suffers}{table.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-H}}Per-Category Performance}{4}{subsection.6.8}\protected@file@percent }
+\bibcite{corbett1994bkt}{1}
+\bibcite{waters2015bkt_limitations}{2}
+\bibcite{piech2015dkt}{3}
+\bibcite{pandey2019sakt}{4}
+\@writefile{lot}{\contentsline {table}{\numberline {VIII}{\ignorespaces Category Breakdown. Array and String problems are predictable. DP is wildly unpredictable, with huge ECE. Consider category-specific models if you need uniform performance.}}{5}{table.8}\protected@file@percent }
+\newlabel{tab:category}{{VIII}{5}{Category Breakdown. Array and String problems are predictable. DP is wildly unpredictable, with huge ECE. Consider category-specific models if you need uniform performance}{table.8}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VII}What We Missed: The Gap to Live Learning}{5}{section.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VIII}Why This Matters}{5}{section.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IX}Limitations}{5}{section.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {X}Future Directions}{5}{section.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {XI}Conclusion}{5}{section.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{5}{section*.1}\protected@file@percent }
+\bibcite{yang2021gikt}{5}
+\bibcite{oh2021problem_graphs}{6}
+\bibcite{barocas2019}{7}
+\bibcite{elo1978}{8}
+\bibcite{glickman2008}{9}
+\gdef \@abspage@last{6}

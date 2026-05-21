@@ -1,0 +1,37 @@
+{
+  "generatedAt": "2026-05-15T09:08:38.045Z",
+  "options": {
+    "students": 220,
+    "interactionsPerStudent": 250,
+    "minTestsPerStudent": 5,
+    "maxTestsPerStudent": 10,
+    "testQuestionCounts": [
+      30,
+      40,
+      50,
+      65
+    ],
+    "joinCode": "FTE455",
+    "courseTitle": "FTE455 - GATE DA Adaptive Readiness",
+    "questionBankPath": "tmp_question_bank_export.json",
+    "outputDir": "datasets/dars",
+    "seed": "dars-fte455-industry-trial"
+  },
+  "sourceQuestionBank": "C:\\Users\\sunil\\Downloads\\btech-project\\tmp_question_bank_export.json",
+  "files": {
+    "studentInteractions": "student_interactions.csv",
+    "questionKnowledgeGraph": "question_knowledge_graph.csv",
+    "studentTestSessions": "student_test_sessions.csv",
+    "studentTestQuestionResponses": "student_test_question_responses.csv",
+    "studentPerformanceSnapshots": "student_performance_snapshots.csv",
+    "botStudents": "bot_students_fte455.csv"
+  },
+  "rowCounts": {
+    "studentInteractions": 55000,
+    "questionKnowledgeGraph": 2140,
+    "studentTestSessions": 1683,
+    "studentTestQuestionResponses": 77850,
+    "studentPerformanceSnapshots": 220,
+    "botStudents": 220
+  }
+}
