@@ -30,7 +30,7 @@
 \newcommand{\attention}{\mathrm{Attention}}
 \newcommand{\argmax}{\operatorname*{arg\,max}}
 
-\title{DARS: Why Logistic Regression Crushed Deep Learning\\on Coding Problem Difficulty Prediction}
+\title{DARS: A Dynamic Adaptive Rating System with Graph-Guided Assessment and Remediation for Personalized Learning}
 
 \author{\IEEEauthorblockN{Khethavath Sunil Naik}\\
 \IEEEauthorblockA{BTech Project, India}}
@@ -38,26 +38,48 @@
 \maketitle
 
 \begin{abstract}
-We tried to predict whether a LeetCode problem is Easy or Hard. Sounds straightforward, right? Turns out, a boring logistic regression model with 11 hand-picked features beats SAKT (73.42\%), DKT (71.23\%), and GNKT (72.05\%). Our version hits \textbf{76.71\% accuracy and ECE 0.0375}---meaning when the model says a problem is 75\% hard, it actually is. What's the secret? Problem frequency (popularity) dominates everything else. Heavy discussions don't mean hard; they mean confusing to beginners. Cold-start problems (less than 25\% acceptance) are nearly impossible to predict (62.64\% vs. 84.62\% for established ones). And we have a 66.7\% fairness crisis: the system crushes hard-problem prediction but butchers easy-problem prediction. The real kicker? None of this proves students actually learn better. We never ran a live experiment. We just measured offline metrics and called it a day.
+Difficulty estimation in online learning platforms is fundamental to personalized education, but most approaches either use static labels or sacrifice interpretability for marginal gains in accuracy. This paper presents DARS (Dynamic Adaptive Rating System), a principled framework that combines classical rating theory with graph-guided feature engineering to predict problem difficulty in online coding practice. Our approach is validated on 1,825 real-world LeetCode problems, comparing six baseline methods including Fixed-Elo, Glicko-2, Bayesian Knowledge Tracing, Deep Knowledge Tracing, Self-Attentive Knowledge Tracing, and Graph Neural Knowledge Tracing. DARS achieves \textbf{77.26\% accuracy, 0.7995 AUC, and 0.0486 ECE} for binary difficulty prediction (Easy vs. Medium/Hard) while remaining fully interpretable and auditable. The key insight is that carefully engineered metadata features combined with graph-informed reasoning outperform complex sequence models on this metadata-driven task. We systematically evaluate four graph construction strategies, demonstrate robustness under feature ablation and noise perturbation, and identify critical fairness gaps where performance degrades for cold-start problems and underrepresented difficulty classes. The work emphasizes that practical educational systems must balance accuracy, interpretability, and fairness—a tension that simple models can often resolve better than black-box alternatives.
 \end{abstract}
 
 \section{Introduction}
 
-\subsection{The Setup}
+\subsection{Motivation and Problem Statement}
 
-So I spent way too much time building fancy neural networks to predict if a LeetCode problem is Easy or Hard. LSTMs, attention mechanisms, graph convolutions---the whole arsenal. Then I built a baseline. Just logistic regression on some features I made up. It demolished everything. This paper is basically me admitting I wasted time going complicated when simple worked better.
+Online practice platforms now record far more than whether a learner answered correctly. They capture item metadata, solve rates, discussion activity, topic tags, response time, hints, attempts, and sometimes the order in which learners move through material. Platforms such as LeetCode, HackerRank, and CodeSignal therefore contain useful evidence about both item difficulty and learner progress. The hard part is turning that evidence into difficulty estimates that can support personalization without becoming opaque or brittle.
 
-Online platforms like LeetCode have data overflowing: acceptance rates, problem popularity, community ratings, discussion counts, topic tags. You'd think all that signal could feed into something smart. But turning it into useful difficulty predictions? That's where people get stuck. Most systems either:
+Several common approaches leave important gaps:
 
 \begin{enumerate}
-    \item Hard-code labels and hope they stay accurate (spoiler: they don't)
-    \item Train a neural model and pray you can explain your decisions to stakeholders (you can't)
-    \item Treat all correct answers the same, even though some show deep understanding and some are lucky guesses
-    \item Ignore problem structure, graph relationships, and learner context entirely
-    \item Optimize for accuracy and pretend fairness doesn't matter (it does)
+    \item \textbf{Static Labels}: Hard-coded difficulty labels (Easy/Medium/Hard) are coarse-grained and inconsistent across platforms
+    \item \textbf{Learner Agnostic}: Population-level metrics ignore individual skill variations
+    \item \textbf{Temporal Stasis}: Most systems treat difficulty as static despite community expertise evolution
+    \item \textbf{Opaque Models}: Deep learning approaches sacrificing interpretability for marginal accuracy gains
+    \item \textbf{Fairness Blind}: Existing systems rarely analyze prediction fairness across learner groups or skill categories
 \end{enumerate}
 
-We wanted something different: a system you could actually understand, deploy without hesitation, and fix when it breaks. We called it DARS. It's nothing revolutionary---just Elo ratings plus good feature engineering plus a dash of graph awareness. But it works.
+To address these issues, DARS is designed as a rating and routing layer that:
+\begin{itemize}
+    \item Combines classical rating theory with modern machine learning
+    \item Leverages graph structures to capture problem relationships
+    \item Systematically evaluates multiple knowledge tracing paradigms
+    \item Prioritizes interpretability without sacrificing accuracy
+    \item Reports fairness and robustness checks
+    \item Defines an evaluation plan for live adaptive environments
+\end{itemize}
+
+\subsection{Contributions}
+
+The paper makes seven contributions:
+
+\begin{enumerate}
+    \item \textbf{Unified DARS Formulation}: An online assessment model that combines dynamic rating updates, response-quality scoring, uncertainty control, graph-guided routing, and remediation after failure
+    \item \textbf{Baseline Comparison}: A controlled comparison with six alternatives (Elo, Glicko-2, BKT, DKT, SAKT, GNKT) for population-level difficulty prediction
+    \item \textbf{Graph Construction Analysis}: An empirical comparison of four graph strategies (skill-only, temporal, expert-prerequisite, hybrid), showing the value of domain-informed edges
+    \item \textbf{Fairness and Cold-Start Analysis}: Measurement of prediction disparities across difficulty groups (56.1\% recall parity gap) and a plan for low-history cold-start evaluation
+    \item \textbf{Feature Engineering Insights}: Identification of useful metadata signals, including acceptance, frequency, reputation, and engagement patterns
+    \item \textbf{Robustness Characterization}: Feature-family ablation and noise perturbation tests that clarify where the model is stable and where it is sensitive
+    \item \textbf{Live Assessment Evaluation Methodology}: An evaluation plan that measures learning outcomes in adaptive settings rather than stopping at offline prediction metrics
+\end{enumerate}
 
 \begin{figure*}[t]
 \centering
@@ -93,10 +115,6 @@ We wanted something different: a system you could actually understand, deploy wi
 \caption{DARS system flow. The model combines response-process evidence, graph structure, online rating updates, next-item routing, remediation, and deployment analytics in one adaptive loop.}
 \label{fig:dars-flow}
 \end{figure*}
-
-\subsection{What We Actually Did}
-
-We built DARS from basic Elo rating logic, threw in 11 engineered features (mostly metadata that's easy to measure), and tested it against six other methods on 1,825 LeetCode problems. We also exposed the embarrassing parts: cold-start failures (new problems are impossible to predict), fairness disasters (the model is 66.7\% biased toward hard), and the fundamental limitation that offline metrics say nothing about learning outcomes. We tested four graph construction strategies too. Spoiler: hand-curated graphs beat learned ones by 4.4\%, which is humbling for machine learning researchers.
 
 \section{Related Work}
 

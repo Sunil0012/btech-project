@@ -1,0 +1,620 @@
+DARS: A Dynamic Adaptive Rating System with
+Graph-Guided Assessment and Remediation for
+Personalized Learning
+Khethavath Sunil Naik
+BTech Project, India
+Abstract—Adaptive learning systems need more than a final 3) Temporal Stasis: Most systems treat difficulty as static
+score or a static difficulty tag. They need estimates that are despite community expertise evolution
+calibrated enough for intervention, simple enough to audit, and
+4) Opaque Models: Deep learning approaches sacrificing
+richenoughtoguidethenextusefulactivity.Thispaperpresents
+interpretability for marginal accuracy gains
+DARS, a Dynamic Adaptive Rating System that brings together
+online rating updates, response-quality scoring, graph-guided 5) Fairness Blind: Existing systems rarely analyze predic-
+item routing, and interpretable feature engineering. The study tion fairness across learner groups or skill categories
+is organized around two complementary settings: (i) population-
+To address these issues, DARS is designed as a rating and
+level coding problem difficulty prediction on a LeetCode dataset
+of1,825problemsand(ii)response-leveladaptiveassessmentvali- routing layer that:
+dation on ASSISTments-style chronological learner interactions.
+• Combines classical rating theory with modern machine
+On LeetCode, DARS is evaluated against Fixed-Elo, Glicko-2,
+learning
+Bayesian Knowledge Tracing (BKT), Deep Knowledge Tracing
+(DKT), Self-Attentive Knowledge Tracing (SAKT), and Graph • Leverages graph structures to capture problem relation-
+Neural Knowledge Tracing (GNKT). The graph component is ships
+tested using skill-only, temporal transition, expert prerequisite, • Systematically evaluates multiple knowledge tracing
+and hybrid constructions. With target leakage removed from
+paradigms
+feature engineering, DARS reaches 77.26% accuracy, 0.7995
+AUC, and 0.0486 ECE for binary difficulty prediction (Easy • Prioritizes interpretability without sacrificing accuracy
+vs. Medium/Hard), while remaining easier to inspect than the • Reports fairness and robustness checks
+neural baselines. The response-level formulation also accounts • Definesanevaluationplanforliveadaptiveenvironments
+for time, hints, attempts, streaks, graph centrality, uncertainty,
+and remediation. The main result is not that a small model is
+alwaysbest,butthatacarefullyspecifiedratinglayerwithgraph B. Contributions
+context can be both practical and competitive. The experiments
+also show where the system still needs work: low-history cold- The paper makes seven contributions:
+start cases, group-level fairness, and evaluation in live adaptive
+1) Unified DARS Formulation: An online assessment
+environments where learning gains matter more than prediction
+model that combines dynamic rating updates, response-
+metrics alone.
+quality scoring, uncertainty control, graph-guided rout-
+I. INTRODUCTION ing, and remediation after failure
+2) Baseline Comparison: A controlled comparison with
+A. Motivation and Problem Statement
+six alternatives (Elo, Glicko-2, BKT, DKT, SAKT,
+Onlinepracticeplatformsnowrecordfarmorethanwhether GNKT) for population-level difficulty prediction
+a learner answered correctly. They capture item metadata, 3) Graph Construction Analysis: An empirical compari-
+solverates,discussionactivity,topictags,responsetime,hints, sonoffourgraphstrategies(skill-only,temporal,expert-
+attempts, and sometimes the order in which learners move prerequisite, hybrid), showing the value of domain-
+through material. Platforms such as LeetCode, HackerRank, informed edges
+and CodeSignal therefore contain useful evidence about both 4) Fairness and Cold-Start Analysis: Measurement of
+item difficulty and learner progress. The hard part is turning prediction disparities across difficulty groups (56.1%
+thatevidenceintodifficultyestimatesthatcansupportperson- recall parity gap) and a plan for low-history cold-start
+alization without becoming opaque or brittle. evaluation
+Several common approaches leave important gaps: 5) Feature Engineering Insights: Identification of useful
+1) Static Labels: Hard-coded difficulty labels metadata signals, including acceptance, frequency, rep-
+(Easy/Medium/Hard) are coarse-grained and utation, and engagement patterns
+inconsistent across platforms 6) Robustness Characterization: Feature-family ablation
+2) Learner Agnostic: Population-level metrics ignore in- andnoiseperturbationteststhatclarifywherethemodel
+dividual skill variations is stable and where it is sensitiveLearnerand Featureand
+Item-skillgraph
+itemlogs statebuilder
+skills,transitions,
+correctness, ratinggap,
+prerequisites
+time,hints quality,centrality
+Analytics
+Onlineupdate Mastery no NDexAtRitSemprroobuatbinilgity
+risk,mastery,
+∆R u ,∆D i gap? cpˆh u a i llaenndgeunmcaetrctahinty fairness
+yes
+Remediationrouting
+nearby
+prerequisiteitem
+Fig. 1: DARS system flow. The model combines response-process evidence, graph structure, online rating updates, next-item
+routing, remediation, and deployment analytics in one adaptive loop.
+7) Live Assessment Evaluation Methodology: An evalu- mapping and can be fragile when observations per skill are
+ation plan that measures learning outcomes in adaptive sparse [2].
+settingsratherthanstoppingatofflinepredictionmetrics Deep Knowledge Tracing (DKT) [3] replaces Markov
+assumptions with LSTM networks that encode interaction
+II. RELATEDWORK sequences:
+A. Classical Assessment and Rating Systems
+h =LSTM([y ,s ],h ) (3)
+t t−1 t−1 t−1
+Difficulty estimation has a long history in educational
+DKT captures temporal dependencies that classical tracing
+measurement. The most relevant classical approaches are:
+models miss, but its hidden state is difficult to audit in an
+Item Response Theory (IRT) models the probability of
+educational product.
+a correct response as a function of learner ability and item
+Self-Attentive Knowledge Tracing (SAKT) [4] augments
+difficulty. Its assumptions are useful for test calibration, but
+DKT with multi-head attention, allowing the model to weight
+fixed item parameters and batch estimation make it less
+past interactions by relevance:
+convenient for fast-moving online practice systems.
+Elo Rating Systems, originating from chess, model player H
+(cid:88)
+strength R and item difficulty D. The expected probability of output t = α h tv h t (4)
+success is: h=1
+1
+p= (1) where αt are attention weights. SAKT gives the model a
+1+10(D−R)/400
+direct way to reuse relevant past interactions, although its
+Ratings update as R′ = R + K(y − p), where K is a decisions still require care when explanations are needed.
+fixed step size. Elo is attractive because it is lightweight and Graph Neural Knowledge Tracing (GNKT) [5] lever-
+online,butthebasicformignoresproblemmetadata,response ages skill-problem bipartite graphs via graph convolutional
+process, and skill context. networks:
+Glicko-2 extends Elo with rating deviation ϕ and volatility  
+σ. This gives the model a notion of uncertainty, although the h′ i =σW (cid:88) (cid:112) h j  (5)
+main evidence is still binary correctness. |N(i)||N(j)|
+j∈N(i)
+B. Knowledge Tracing Approaches GNKT incorporates relational structure directly. Its main
+drawback in this setting is that it usually benefits from richer
+Bayesian Knowledge Tracing (BKT) [1] models learner
+learner histories than are available in metadata-only coding
+mastery as a hidden Markov process with four parameters:
+problem datasets.
+p(initial knowledge), p(learning), p(guess), p(slip). The mas-
+tery state evolves probabilistically: C. Graph-Based Problem Characterization
+Problem graphs are increasingly used in coding education
+P(master )=P(master )+(1−P(master ))·p (2)
+t+1 t t learn
+because item relationships often carry pedagogical mean-
+BKT remains useful because its parameters have a clear ing [8]. Much of the prior work uses either learned repre-
+interpretation. In practice, however, it depends on a fixed skill sentations or simple similarity links. In contrast, this studyLearner Item Expected score
+rating R rating R p = 1
+u i 1+10(Ri−Ru)/400
+Updated Fixed update Observed answer
+ratings ∆ = K(y −p) y ∈ {0,1}
+Rating-only scoring core
+Next item selected
+mostly by rating gap
+Fig. 2: Conventional Elo-based assessment flow. The update is simple and online, but it does not model response process,
+graph structure, remediation, or probability calibration.
+compares several graph definitions under the same evaluation Feature Type Description
+protocol. Problem ID Integer Unique identifier
+Title String Problem name
+D. Fairness in Educational Technology
+Difficulty Categorical {Easy, Medium, Hard}
+Fairnessinadaptivelearningsystemsisstilllessmaturethan Acceptance Rate Float % of accepted submissions
+Frequency Float Percentile popularity score
+accuracy evaluation. Three concerns are especially relevant:
+Rating Float Community rating (1–100)
+equal opportunity, or comparable recall across groups [9];
+Likes/Dislikes Integer Vote counts
+demographic parity, or comparable positive prediction rates; Discuss Count Integer Discussion threads
+andcalibrationparity,orconsistentprobabilitymeaningacross Related Topics Strings Skill tags (Array, String, Tree, ...)
+groups. These ideas are applied here to coding assessment. Similar Questions References Problem links
+III. DATASETANDMETHODOLOGY TABLE I: LeetCode Dataset Features
+Medium/Hard (1,348 problems, 73.9%). The imbalance is
+kept rather than artificially balanced, since it reflects the
+distribution a deployed recommender would face. Stratified
+splitting and group-level metrics are then used to make the
+imbalance visible.
+B. Feature Engineering
+The model uses 11 features derived from the raw metadata.
+The emphasis is on features that can be inspected and recom-
+puted easily.
+1) Normalized Features: Raw features are z-score normal-
+ized:
+A. LeetCode Problem Dataset x−µ
+x = (6)
+ThemainexperimentusesaLeetCodeproblemdatasetwith norm σ
+1,825 algorithm questions and the metadata fields listed in 2) Composite Features: Difficulty Index: Uses the inverse
+Table I. acceptance rate as a leakage-safe proxy for observed item
+The original three-level difficulty label is converted difficulty:
+into a binary task: Easy (477 problems, 26.1%) versus D =1−acc rate (7)
+i iLoweracceptanceusuallyindicatesthataproblemisharder response-process attributes. The ASSISTments-style prepro-
+for the population. The label y is not used in this feature, cessing retains 6,044,359 valid attempts from 46,348 learners,
+i
+which prevents target leakage. 179,052 problems, and 265 skills. Under a held-out-student
+Reputation Score: Summarizes community feedback: protocol, DARS outperforms static mastery, fixed-K Elo, and
+Glicko-2, with Brier score 0.1368, log loss 0.4251, accuracy
+rating norm +likes norm
+R i = i 2 i (8) 0.8141, ROC AUC 0.8131, and ECE 0.0096. This evaluation
+is included to show how the same rating logic behaves when
+Engagement Factor: Captures how much attention a prob-
+learner trajectories are available.
+lem receives:
+frequency norm +discuss norm
+E = i i (9)
+i 2
+Complexity Score: Weighted composite:
+C =0.4D +0.3R +0.3E (10)
+i i i i
+TheablationstudyinSectionVII-Echeckshowmucheach
+feature family contributes after training.
+IV. METHODS:KNOWLEDGETRACINGPARADIGMS
+A. DARS Online Rating Core
+DARS treats assessment as a graph-aware online rating
+problem. Each learner u has an ability estimate R , each
+u
+item i has a difficulty estimate D , and the item-skill graph
+i
+G=(V,E) supplies context for routing and remediation. The
+base probability of correctness is:
+1
+p(0) = , (11)
+ui 1+10(D
+i
+∗−Ru)/400
+where D∗ is the effective item difficulty after graph adjust-
+i
+ment:
+D∗ =D +β c +β I(i,s). (12)
+i i c i s
+Herec isnormalizeditemcentralityandI(i,s)isanoptional
+i
+local skill adjustment. In this way, a central prerequisite item
+can be treated as more informative than an isolated item with
+the same raw rating.
+UnlikefixedElo,DARSdoesnottreateverycorrectanswer
+C. Train-Test Methodology as equally informative. It first converts process signals into a
+A stratified 80–20 split is used, giving 1,460 training response-quality score:
+problems and 365 test problems. The random seed is fixed
+τ =1−min(T /T ,1), h =min(H /H ,1), a =min((A −1)/A ,1),
+ui ui max ui ui max ui ui max
+at 2026 so that the reported numbers can be reproduced.
+(13)
+where T is response time, H is hint count, and A is
+D. Response-Level Adaptive Assessment Validation ui ui ui
+attempt count. For correct responses:
+The LeetCode experiment is a population-level difficulty
+task, but DARS is intended to operate online with learners. Q+ ui =α t τ ui +α h (1−h ui )+α a (1−a ui )+α s ψ u , (14)
+For that reason, the paper also includes a response-level
+and the final quality signal is:
+adaptive assessment formulation. In that setting, each row is
+(cid:40)
+a chronological learner attempt with learner and item identi- Q = Q+ ui , y ui =1, (15)
+fiers,skilllabels,timestamps,correctness,hints,attempts,and ui ϵτ , y =0.
+ui uiLearner state Item-skill graph Rating prior
+R ,n ,κ ,σ2 centrality and neighbors p(0)
+u u u u ui
+Dynamic update Quality score Response process Calibrated
+K (t),ϕ(κ ) Q time, hints, attempts DARS probability
+u u ui
+Update ability Next item
+and item difficulty or remediation
+DARS scoring, updating, routing, and remediation loop
+Learner and
+skill analytics
+Fig.3:DARSarchitectureandassessmentflow.Thealgorithmcombinesratingstate,item-skillgraphcontext,response-process
+evidence, dynamic updating, calibrated probability estimation, and remediation-aware routing.
+The update is: Algorithm 1 DARS Online Update and Remediation
+Require: learner u, item i, outcome y , response time T ,
+∆R =K(n ,σ2)·ϕ(k )·(Q −p(0))−ρ , (16) ui ui
+u u u u ui ui ui hints H ui , attempts A ui , graph G
+whereK(n ,σ2)decreasesasevidenceaccumulates,ϕ(k )is 1: Compute graph-adjusted difficulty D i ∗ ← D i + β c c i +
+u u u β I(i,s)
+a bounded streak multiplier, and ρ penalizes rapid guesses. s
+The result is still lightweight eno u u i gh for online use, but it 2: Compute expected correctness p( u 0 i ) ← (1 +
+carries more educational information than a binary win/loss
+10(D
+i
+∗−Ru)/400)−1
+update. 3: Compute process scores τ ui , h ui , a ui and streak term ψ u
+B. Fixed-Elo Baseline 4: if y ui =1 then
+TheElobaselineusesR′ =R+K(y−p)withK =32.Itis 5: Q ui ←α t τ ui +α h (1−h ui )+α a (1−a ui )+α s ψ u
+6: else
+included because it is simple, online, and widely understood,
+but it only observes binary correctness. 7: Q ui ←ϵτ ui
+8: end if
+C. Glicko-2 9: ∆R u ←K(n u ,σ u 2)ϕ(k u )(Q ui −p( u 0 i ))−ρ ui
+10: Update learner ability R u ← R u +∆R u and item state
+Glicko-2 adds rating deviation ϕ and volatility to the Elo
+D
+i
+family. The simplified update form used for comparison is:
+11: if y ui =0 or mastery gap remains high then
+(cid:115) 1 12: Selectremediationitemfromprerequisiteneighborhood
+ϕ′ = (17) N (i)
+1 + 3 G
+ϕ2 π2 13: else
+Its parameters are tuned by cross-validation. 14: Select next item with difficulty closest to target chal-
+lenge band
+15: end if
+16: return updated state, calibrated probability, next item
+D. Bayesian Knowledge Tracing
+BKT parameters are estimated with EM for 100 iterations.
+Theinitialmasterystateisinferredfromthelabeldistribution,
+and convergence is declared when the log-likelihood change
+falls below 10−5.E. Deep Knowledge Tracing skill temporal
+p1 p2 p3
+The DKT baseline uses a 64-dimensional input embedding,
+a 128-unit LSTM layer, dropout of 0.5, and a sigmoid output.
+remed.
+It is trained with Adam at learning rate 10−3, batch size 32,
+and early stopping over 50 epochs. Array p4 DP
+prereq.
+F. Self-Attentive Knowledge Tracing Fig. 4: Graph evidence used by DARS. Skill edges, temporal
+SAKTuseseightattentionheadsovertheproblem-encoding transitions, expert prerequisites, and remediation links are
+sequence and sinusoidal positional encodings. The remaining combined to guide both difficulty calibration and next-item
+hyperparameters match DKT where possible. selection.
+G. Graph Neural Knowledge Tracing
+D. Hybrid Graphs
+GNKT uses the four graph constructions described in Sec-
+tion V. The graph convolution network has 64→32→16 hid- The hybrid graph combines the three sources:
+den units, dropout 0.5, and three message-passing iterations.
+Ahybrid =αAskill+βAtemporal+γAexpert, α+β+γ =1 (21)
+H. DARS: Proposed Logistic Regression Approach
+Theweights(α,β,γ)areselectedonthevalidationsetwith
+DARSuseslogisticregressionovertheengineeredmetadata a grid search.
+features:
+P(Hard|x)=sigmoid(wTx+b) (18)
+VI. EVALUATIONFRAMEWORK
+A. Classification Metrics
+The model is optimized with L-BFGS for up to 1000
+Accuracy: Overall classification correctness.
+iterations.Training isfast enoughforrepeated evaluation,and
+Sensitivity(TPR):Recallofmedium/hardproblems, TP .
+prediction is inexpensive enough for real-time use. TP+FN
+Specificity (TNR): Recall of easy problems, TN .
+Rationale: The purpose of this baseline is not to argue TN+FP
+that logistic regression is universally superior. Rather, it tests B. Probabilistic Calibration
+whether a modest, auditable model with well-chosen features BrierScore:Meansquarederrorofprobabilitypredictions:
+can compete with heavier sequence and graph models on this
+n
+1 (cid:88)
+metadata-driven task. BS= (y −pˆ)2 (22)
+n i i
+i=1
+V. GRAPHCONSTRUCTIONSTRATEGIES
+Log Loss:
+A. Skill-Only Graphs
+n
+1 (cid:88)
+In the skill-only graph, two problems are connected when LL=− [y logpˆ +(1−y )log(1−pˆ)] (23)
+n i i i i
+they share at least one topic tag. This construction is easy to
+i=1
+explain, but it does not encode order or prerequisite structure.
+Expected Calibration Error (ECE): Predictions are di-
+(cid:40) vided into 10 confidence bins, and the average gap between
+1 if topics(i)∩topics(j)̸=∅
+Askill = (19) empirical accuracy and predicted confidence is computed:
+ij 0 otherwise
+10
+ECE=
+(cid:88)|B
+b
+|
+|acc −conf | (24)
+B. Temporal Transition Graphs n b b
+b=1
+The temporal transition graph assigns edge weights ac-
+An ECE close to 0 means that predicted probabilities have
+cording to how often one problem appears before another in
+a consistent empirical interpretation.
+inferred problem-solving sequences:
+C. Fairness Metrics
+|{sessions: solved i then j}|
+Atemporal = (20) Equal Opportunity Parity:Recalldisparityacrossgroups:
+ij N
+total
+Gap=|TPR −TPR | (25)
+This graph is meant to approximate pedagogical flow: group1 group2
+problem i is connected to problem j when learner behavior DemographicParity:Differenceinpredictedpositiverates.
+suggests that i often comes first. Calibration Parity: ECE evaluated separately for each
+group.
+C. Expert Prerequisite Graphs
+D. Robustness Metrics
+The expert prerequisite graph uses manually curated edges,
+such as learning arrays before linked lists or introductory Feature Ablation: Retrain the model after removing a
+dynamic programming before knapsack-style tasks. It is more feature family and measure the performance change.
+expensive to build, but it captures relationships that metadata Noise Perturbation: Add Gaussian noise N(0,σ2) to ac-
+alone may miss. ceptance rate and measure stability.VII. RESULTS Quartile Acc. Range Accuracy AUC ECE
+A. Main Results: Six Method Comparison Q1 (High) 0.75–0.99 84.62% 0.7836 0.0245
+Q2 0.50–0.75 78.02% 0.7512 0.0329
+Q3 0.25–0.50 73.91% 0.7185 0.0401
+Method Accuracy AUC Brier LogLoss ECE Q4 (Low) 0.01–0.25 62.64% 0.6421 0.0512
+DARS (Ours) 77.26% 0.7995 0.1560 0.4691 0.0486 Gap 22.0% 0.1415 0.0267
+SAKT 73.42% 0.7381 0.1893 0.5287 0.0456
+DKT 71.23% 0.7263 0.2104 0.5589 0.0521TABLE V: Cold-Start Analysis: Performance degrades for
+GNKT 72.05% 0.7312 0.2051 0.5431 0.0489
+low-acceptance (new/unpopular) problems
+Glicko-2 58.36% 0.6041 0.3652 0.7841 0.1289
+Fixed-Elo 54.93% 0.5821 0.4104 0.8456 0.1547
+TABLE II: Method comparison on LeetCode binary difficulty D. Fairness Analysis
+prediction
+1) Cold-Start Problem (Acceptance-Rate Quartiles): Ob-
+servation: Performance is weaker in the low-acceptance
+Interpretation:
+group. These problems likely need extra evidence, such as
+• DARSimprovesaccuracyby3.8 percentage pointsover temporal solve trends, expert priors, or learner-specific histo-
+SAKT. ries.
+• Its Brier score is lower than SAKT, indicating better
+probability estimates. Difficulty N Recall Error Rate Recall Gap
+• Classical rating methods remain useful references, but Easy 95 35.79% 64.21%
+theyunderperformbecausetheyobservefarfewersignals. Medium/Hard 270 91.85% 8.15% 56.1%
+• TheneuralbaselinesperformbetterthanEloandGlicko-
+2, but the metadata-driven DARS model is still competi- TABLE VI: Equal Opportunity: Model biased toward ”hard”
+tive. predictions
+B. Graph Construction Strategy Comparison
+2) Equal Opportunity Fairness: Bias Source: The class
+distribution is dominated by medium/hard problems, so the
+Strategy Accuracy AUC ECE Interpretabillietyarned decision boundary favors the majority class and sac-
+Expert Prerequisite 72.88% 0.7289 0.0368 Very Highrifices easy-problem recall.
+Hybrid 71.51% 0.7198 0.0381 Good Mitigation Strategy: A cost-sensitive variant with class
+Temporal Transition 69.32% 0.7052 0.0405 Good weights such as w = 1.4 and w = 0.9 should be
+easy hard
+Skill-Only 68.49% 0.6987 0.0412 Excellent
+evaluated before deployment.
+TABLE III: Graph Construction Strategies: Expert prerequi-
+E. Feature Ablation Study
+sites achieve best performance
+Graph result: Expert-guided edges outperform the skill- Withheld Family Accuracy AUC AUC Loss
+only graph by 4.4 percentage points (72.88% vs. 68.49%).
+None (Full) 77.26% 0.7995 –
+This suggests that domain knowledge is still valuable when it Acceptance Family 76.44% 0.7596 4.0%
+is encoded in a form the model can use. Reputation Family 76.16% 0.7870 1.2%
+Discussion Family 76.71% 0.7906 0.9%
+C. Feature Importance Analysis Frequency Family 76.71% 0.7968 0.3%
+TABLE VII: Feature-family ablation under leakage-safe fea-
+Feature Coefficient Interpretation
+tures
+Frequency +2.29 Critical: Most popular problems are harder
+Difficulty Index +0.86 High impact on prediction
+Reputation +0.77 Moderate positive association
+F. Robustness: Noise Perturbation
+Engagement -2.66 Counterintuitive: Highly discussed → easier
+Likes +0.23 Small effect
+Discussion Count -0.15 Minimal effect Noise Level Accuracy AUC ECE Status
+TABLE IV: Feature Importance: Standardized Logistic Re- σ=0.00 77.26% 0.7995 0.0486 Baseline
+σ=0.05 76.45% 0.7416 0.0382 Robust
+gression Coefficients
+σ=0.10 74.66% 0.7284 0.0401 Robust
+σ=0.15 72.60% 0.7089 0.0438 Degrading
+Interpretation: The negative engagement coefficient is σ=0.20 70.89% 0.6927 0.0489 Sensitive
+plausible in a coding-practice setting. Some heavily discussed
+TABLEVIII:NoiseRobustness:Modeltoleratessmallpertur-
+problems are not necessarily advanced; they may be widely
+bations
+attemptedbybeginnersandthereforegeneratemorequestions.0.8
+0.7
+0.6
+0.5
+Fixed-Elo Glicko-2 BKT DKT GNKT SAKT DARS
+ycaruccA
+55.0
+85.0
+56.0
+17.0 27.0
+37.0
+77.0 1
+0.8
+0.6
+0.4
+0.2
+0
+0 0.2 0.4 0.6 0.8 1
+Predicted probability
+(a) Accuracy across baselines.
+ycneuqerf
+devresbO
+Perfect
+DARS
+(b) Calibration profile (ECE = 0.0486).
+Fig.5:DARSperformanceplots.Thebarchartcomparespredictiveaccuracyacrossclassical,knowledgetracing,graphneural,
+and DARS methods; the calibration curve shows that predicted probabilities remain close to observed frequencies.
+1) Metrics for Adaptive Assessment: Learner Engage-
+ment: Fraction of recommended problems that learners ac-
+tually attempt:
+(cid:80)
+1[attempt ]
+Engagement= i i (26)
+total problems shown
+Problem Completion Rate: Fraction of recommended
+problems that are eventually solved:
+Deployment Implication:Themodelremainsusableunder
+|{problems solved}|
+small acceptance-rate perturbations, but performance drops Completion= (27)
+|{problems recommended}|
+once noise becomes large enough to blur the main difficulty
+signal.
+Skill Progression: Change in an estimated learner ability
+score:
+G. Category-Stratified Performance
+θ (t)=θ (t−1)+∆(estimated from correct/incorrect)
+learner learner
+(28)
+Category N Accuracy ECE
+Problem Sequencing Efficiency: Skill gain per attempted
+Array 312 82.05% 0.0298 problem:
+String 178 79.78% 0.0315
+Tree 215 77.21% 0.0352 skill gain
+Efficiency= (29)
+Graph 168 73.81% 0.0421 problems attempted
+Dynamic Programming 245 71.43% 0.0512
+2) Proposed Evaluation Methodology:
+TABLE IX: Category Performance: Array problems most
+predictable, DP least
+B. Deployment Considerations
+Interpretation: Dynamic programming problems show the
+Severalpracticalissuesmustbehandledbeforelivedeploy-
+highest calibration error in this table. A category-specific
+ment:
+modeloradditionaltextfeaturesmaybeusefulforthisgroup.
+1) Real-time Inference: DARS inference (< 1ms) vs.
+DKT (∼50ms)
+VIII. LIVEADAPTIVEASSESSMENTFRAMEWORK
+2) Model Updating: Online learning strategies to incorpo-
+rate new data
+A. Beyond Accuracy: Learning Outcome Evaluation
+3) Fairness Monitoring: Track TPR disparity across
+Offline prediction metrics are necessary, but they are not learner groups in deployment
+the final goal of an adaptive assessment system. In a live 4) Cold-Start Mitigation: Combine DARS predictions
+setting, DARS should be judged by whether learners practice with expert hints for new problems
+moreeffectivelyandimprovefaster.Thefollowingmetricsare 5) Learner Privacy: Anonymization strategies for large-
+proposed for that setting: scale deploymentAlgorithm 2 Live Adaptive Assessment Evaluation 2) Should it prioritize overall accuracy even if easy-
+1: Initialize: Learner cohort L, problems P, methods M = problem recall remains lower?
+{DARS,Baseline} 3) What fairness constraint is appropriate for the intended
+2: for each method m∈M do learning context?
+3: for each learner ℓ∈L do These choices should be made explicitly with instructors,
+4: Initialize learner ability θ ℓ ∼N(0,1) learners, and platform stakeholders rather than left as an
+5: for t=1...T (assessment session) do accidental consequence of the training distribution.
+6: Compute difficulty predictions: dˆ p =m(P)
+7: Select problem p∗ = argmax p |dˆ p −θ ℓ | (optimal X. LIMITATIONS
+challenge)
+1) Static Snapshots: The dataset represents one point
+8: Present p∗ to learner ℓ in time, so changes in community behavior are not
+9: Observe response y ℓ,p∗ ∈{0,1} modeled.
+10: Update ability: θ ℓ ←θ ℓ +λ(y ℓ,p∗ −0.5) 2) No Learner Logs: The LeetCode experiment is
+11: Log: engagement, completion, skill progression, population-level and cannot personalize difficulty for
+efficiency
+individual learners.
+12: end for 3) Cross-Sectional Bias: LeetCode may not represent all
+13: end for coding domains, especially non-interview or project-
+14: end for based programming.
+15: Analyze:Learneroutcomes,fairnessacrossdemographics, 4) GraphScalability:Expertprerequisitegraphsareuseful
+cost-benefit
+but require manual curation.
+5) Fairness Tension: Accuracy and fairness constraints
+may conflict and must be balanced deliberately.
+IX. DISCUSSION
+6) Validation Gap: The current experiments evaluate pre-
+A. Why Simple Models Win diction quality; learning outcomes still need live valida-
+tion.
+The results suggest three reasons why the simpler model
+performs well in this setting:
+XI. FUTUREWORK
+1) Feature Quality: Acceptance, frequency, reputation,
+Future work should evaluate DARS in a live adaptive
+and engagement capture much of the signal available
+assessment environment and measure learning outcomes, not
+in metadata.
+onlypredictionmetrics.Aclassroomorproductiontrialshould
+2) Model Capacity: Logistic regression has limited ca-
+compare learning gain, time-to-mastery, retention, engage-
+pacity, which reduces overfitting on a medium-sized
+ment, completion rate, and remediation success under DARS-
+problem dataset.
+guidedsequencingagainstrandom,fixed-difficulty,andexpert-
+3) Interpretability: Coefficients can be inspected directly,
+authored sequencing.
+making debugging and audit easier.
+Additional baselines should include Bayesian Knowledge
+B. Cold-Start Problem Tracing, Deep Knowledge Tracing, self-attentive knowledge
+tracing, and graph neural knowledge tracing under identical
+Cold-start degradation is not only a modeling limitation;
+leakage-safe splits, hyperparameter budgets, and calibration
+it is also an information problem. Without learner history or
+protocols. The graph component should also be tested with
+enough item-level evidence, difficulty is harder to estimate.
+multiple construction strategies: skill-only graphs, tempo-
+Possible responses include:
+ral transition graphs, expert prerequisite graphs, and hybrid
+1) Incorporate expert prior (e.g., “data structure problems graphs. Fairness and robustness should be analyzed across
+are usually harder”) learner groups, skill categories, and low-history cold-start
+2) Use similarity to high-acceptance problems as proxy cases.
+3) Combine with temporal trends (as community solves Beyond these priorities, DARS should be extended with
+more instances) temporal drift modeling for changing item difficulty, cross-
+4) Integrate learner-specific signals (problem solved by domain transfer across HackerRank, CodeSignal, Codeforces,
+experts) and tutoring-system datasets, multimodal problem text em-
+beddings, fairness-aware constrained optimization, and skill
+C. Fairness Implications
+modeling beyond binary difficulty labels.
+The 56.1% recall disparity reflects both class imbalance
+and the distribution of problem types. Before deployment, the XII. CONCLUSION
+system owner must decide what kind of error is most costly: DARS combines classical rating ideas with graph-guided
+1) Should the system place more weight on finding easy feature engineering and adaptive remediation. The paper eval-
+problems correctly? uates six baseline families, compares four graph constructionstrategies,reportsfairnessandrobustnesschecks,andproposes
+a path toward live adaptive assessment evaluation.
+On the LeetCode difficulty task, DARS achieves 77.26%
+accuracy and 0.0486 ECE. The result supports a practical
+point: a transparent model with the right educational signals
+can compete with heavier black-box alternatives.
+For online coding education, DARS offers a practical and
+auditable rating layer for personalized pathways, remediation,
+anddifficultycharacterization.Thenextstepislivevalidation,
+where the main outcome should be learner skill acquisition
+rather than offline accuracy alone.
+REFERENCES
+[1] Corbett,A.T.,&Anderson,J.R.(1994).Knowledgetracing:Modeling
+the acquisition of procedural knowledge. User modeling and user-
+adaptedinteraction,4(4),253–278.
+[2] Waters, A. E. (2015). The limits of Bayesian knowledge tracing.
+ProceedingsofEducationalDataMining,89–98.
+[3] Piech, C., Bassen, J., Huang, J., Ganguli, D., Sahami, M., Guibas, L.
+J.,&Savarese,S.(2015).Deepknowledgetracing.Advancesinneural
+informationprocessingsystems,28.
+[4] Pandey, S., & Karypis, G. (2019). Self-attentive knowledge tracing.
+Proceedings of the 2019 ACM Conference on Learning@ Scale, 384–
+389.
+[5] Yang, Y., Huang, J., Song, L., & Chakraborty, S. (2021). Graph
+neural knowledge tracing. Proceedings of the 14th ACM Conference
+onRecommenderSystems,405–414.
+[6] Elo,A.E.(1978).TheRatingofChessplayers,PastandPresent.Arco
+Publishing.
+[7] Glickman,M.E.(2008).TheGlicko-2ratingsystem.BostonUniversity,
+1–8.
+[8] Oh,J.,Park,D.,&Park,H.(2021).Graph-basedproblemcharacteriza-
+tioninonlinelearning.ACMTransactionsonLearningatScale,1–25.
+[9] Barocas,S.,Hardt,M.,&Narayanan,A.(2019).FairnessandMachine
+Learning.fairmlbook.org.
+[10] IEEE DSAA 2024 Conference. (2024). Data Science and Advanced
+Analytics.Retrievedfromhttps://dsaa.dsaa.info
